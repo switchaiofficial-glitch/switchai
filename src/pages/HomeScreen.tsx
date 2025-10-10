@@ -2285,7 +2285,7 @@ export default function HomeScreen() {
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
                   {sending ? (
                     <button onClick={handleStopGeneration} style={{
-                      minWidth: '75px', height: '35px', paddingHorizontal: '18px',
+                      minWidth: '75px', height: '35px', paddingLeft: '18px', paddingRight: '18px',
                       background: '#fff', border: 'none', borderRadius: '22px', color: '#000',
                       fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontWeight: '700', marginTop: '2px', fontFamily: 'SUSE, sans-serif',
@@ -2294,7 +2294,8 @@ export default function HomeScreen() {
                     <button onClick={handleSend} disabled={!input.trim()} style={{
                       minWidth: '75px',
                       height: '35px',
-                      paddingHorizontal: '18px',
+                      paddingLeft: '18px',
+                      paddingRight: '18px',
                       background: input.trim() ? '#fff' : 'rgba(255, 255, 255, 0.12)',
                       border: 'none',
                       borderRadius: '22px',
