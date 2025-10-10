@@ -1,48 +1,74 @@
+import Lottie from 'lottie-react';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import Lottie from 'lottie-react';
 
 export default function LoginHome() {
   const navigate = useNavigate();
   const [switchAiAnim, setSwitchAiAnim] = React.useState<any>(null);
   const [getStartedAnim, setGetStartedAnim] = React.useState<any>(null);
+  const [isTransitioning, setIsTransitioning] = React.useState(false);
 
   React.useEffect(() => {
     fetch('/animations/switchai.json').then(r => r.json()).then(setSwitchAiAnim).catch(() => {});
     fetch('/animations/getstarted.json').then(r => r.json()).then(setGetStartedAnim).catch(() => {});
   }, []);
 
-  return (
-    <div className="container">
-      <div className="gradient" />
-      <div className="geo1" />
-      <div className="geo2" />
-      <div className="geo3" />
+  const handleGetStarted = () => {
+    setIsTransitioning(true);
+    // Delay navigation to allow fade-out animation
+    setTimeout(() => {
+      navigate('/login/signin');
+    }, 300);
+  };
 
-      <div className="center">
-        <div style={{ opacity: 1, transform: 'scale(1)', marginBottom: 70 }}>
+  return (
+    <div className={`login-home ${isTransitioning ? 'fade-out' : 'fade-in'}`}>
+      {/* Background Elements */}
+      <div className="login-home-gradient" />
+      <div className="login-home-geo1" />
+      <div className="login-home-geo2" />
+      <div className="login-home-geo3" />
+
+      {/* Main Content */}
+      <div className="login-home-main">
+        {/* Logo Section */}
+        <div className="login-home-logo-section">
           {switchAiAnim && (
-            <Lottie animationData={switchAiAnim} loop className="logoLottie" />
+            <Lottie
+              animationData={switchAiAnim}
+              loop
+              className="login-home-logo-lottie"
+            />
           )}
         </div>
 
-        <div style={{ textAlign: 'center' }}>
-          <h1 className="title" style={{ fontSize: 64, margin: 0, fontFamily: 'VarelaRound_400Regular, Varela Round, Inter, sans-serif' }}>SwitchAi</h1>
-          <p className="subtitle" style={{ fontFamily: 'SUSE_400Regular, Inter, sans-serif' }}>AI-Powered Legal Intelligence</p>
-        </div>
+        {/* Content Section */}
+        <div className="login-home-content">
+          <div className="login-home-branding">
+            <h1 className="login-home-title">SwitchAi</h1>
+            <p className="login-home-subtitle">AI-Powered Legal Intelligence</p>
+          </div>
 
-        <div className="cta">
-          <button
-            className="btn"
-            onClick={() => navigate('/login/signin')}
-          >
-            <div className="btnGradient">
-              <span className="btnText" style={{ fontFamily: 'SUSE_600SemiBold, Inter, sans-serif' }}>Get Started</span>
-              {getStartedAnim && (
-                <Lottie animationData={getStartedAnim} loop className="btnLottie" />
-              )}
-            </div>
-          </button>
+          {/* CTA Section */}
+          <div className="login-home-cta">
+            <button
+              className="login-home-cta-btn"
+              onClick={handleGetStarted}
+              aria-label="Get started with SwitchAi"
+            >
+              <div className="login-home-cta-content">
+                <span className="login-home-cta-text">Get Started</span>
+                {getStartedAnim && (
+                  <Lottie
+                    animationData={getStartedAnim}
+                    loop
+                    className="login-home-cta-lottie"
+                  />
+                )}
+              </div>
+            </button>
+          </div>
+
         </div>
       </div>
     </div>

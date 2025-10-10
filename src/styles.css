@@ -2,10 +2,10 @@
 @import 'katex/dist/katex.min.css';
 
 :root{
-  --bg-0:#0b0f14;
-  --bg-1:#111827;
-  --text:#ffffff;
-  --muted:#94a3b8;
+  --bg-0: rgba(11, 15, 20, 0.95);
+  --bg-1: rgba(11, 15, 20, 0.7);
+  --text: #ffffff;
+  --muted: #94a3b8;
 }
 *{box-sizing:border-box}
 html,body,#root{height:100%}
@@ -40,6 +40,37 @@ body, #root { min-height: 100dvh; }
   padding: 1em;
 }
 
+/* Page Transition Animations */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.fade-out {
+  animation: fadeOut 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
 /* Shared */
 .container{min-height:100dvh;display:flex;align-items:center;justify-content:center;position:relative;overflow:auto;overscroll-behavior:contain;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
 .gradient{position:absolute;inset:0;background:linear-gradient(180deg,var(--bg-0),var(--bg-0),var(--bg-1));pointer-events:none}
@@ -52,45 +83,780 @@ body, #root { min-height: 100dvh; }
 .title{font-weight:400;letter-spacing:-1.2px;text-align:center;text-shadow:0 4px 12px rgba(0,0,0,.25)}
 .subtitle{font-size:18px;font-weight:400;color:var(--muted);letter-spacing:.8px;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.2);max-width:300px;margin-top:8px}
 
-/* Button */
-.cta{margin-top:40px}
-.btn{border-radius:24px;overflow:hidden;width:280px;background:rgba(255,255,255,0.06);border:none;padding:0}
-.btnGradient{display:flex;align-items:center;justify-content:center;height:68px;background:linear-gradient(135deg,#a5f3fc,#67e8f9)}
-.btnText{font-size:20px;font-weight:600;letter-spacing:1px;color:#0b0f14}
-.btnLottie{width:34px;height:34px;margin-left:22px;margin-right:-22px}
+/* LoginHome Page Styles */
+.login-home {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(11, 15, 20, 0.95), rgba(5, 5, 5, 0.95), rgba(0, 0, 0, 0.95));
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  position: relative;
+  overflow-x: hidden;
+}
 
-/* Lottie sizing */
-.logoLottie{width:220px;height:220px;background:transparent;margin-left:-22px}
+.login-home-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 15, 20, 0.95), rgba(5, 5, 5, 0.95), rgba(0, 0, 0, 0.95));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-home-geo1, .login-home-geo2, .login-home-geo3 {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-home-geo1 {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  top: -15%;
+  right: -15%;
+}
+
+.login-home-geo2 {
+  width: 180px;
+  height: 180px;
+  left: 10%;
+  bottom: 20%;
+  border-color: rgba(255, 255, 255, 0.05);
+  transform: rotate(45deg);
+}
+
+.login-home-geo3 {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  right: 20%;
+  bottom: 10%;
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.login-home-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  justify-content: center;
+  align-items: center;
+  gap: 3rem;
+}
+
+.login-home-logo-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.login-home-logo-lottie {
+  width: 220px;
+  height: 220px;
+  background: transparent;
+  margin-left: -22px;
+}
+
+.login-home-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+  max-width: 600px;
+  width: 100%;
+}
+
+.login-home-branding {
+  text-align: center;
+}
+
+.login-home-title {
+  font-size: 4rem;
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, #ffffff 0%, #e5e7eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.login-home-subtitle {
+  font-size: 1.125rem;
+  font-weight: 400;
+  color: #94a3b8;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+  font-size: 0.875rem;
+}
+
+.login-home-cta {
+  display: flex;
+  justify-content: center;
+}
+
+.login-home-cta-btn {
+  border-radius: 1.5rem;
+  overflow: hidden;
+  width: 280px;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.login-home-cta-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.login-home-cta-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 4.5rem;
+  background: linear-gradient(135deg, #a5f3fc 0%, #67e8f9 100%);
+  padding: 0 2rem;
+  gap: 1rem;
+}
+
+.login-home-cta-text {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  color: rgba(11, 15, 20, 0.9);
+}
+
+.login-home-cta-lottie {
+  width: 34px;
+  height: 34px;
+  margin-left: 22px;
+  margin-right: -22px;
+}
+
+.login-home-features {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.login-home-feature {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  min-width: 120px;
+  transition: all 0.2s ease;
+}
+
+.login-home-feature:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+}
+
+.login-home-feature-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.login-home-feature-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #e5e7eb;
+  text-align: center;
+}
+
+/* Responsive Design for LoginHome */
+@media (max-width: 768px) {
+  .login-home-main {
+    padding: 1.5rem 1rem;
+    gap: 2rem;
+  }
+
+  .login-home-logo-lottie {
+    width: 180px;
+    height: 180px;
+    margin-left: 0;
+  }
+
+  .login-home-title {
+    font-size: 3rem;
+  }
+
+  .login-home-subtitle {
+    font-size: 0.8125rem;
+  }
+
+  .login-home-cta-btn {
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .login-home-cta-content {
+    height: 4rem;
+    padding: 0 1.5rem;
+  }
+
+  .login-home-cta-text {
+    font-size: 1.125rem;
+  }
+
+  .login-home-cta-lottie {
+    width: 28px;
+    height: 28px;
+    margin-left: 16px;
+    margin-right: -16px;
+  }
+
+  .login-home-features {
+    gap: 1rem;
+  }
+
+  .login-home-feature {
+    min-width: 100px;
+    padding: 0.75rem;
+  }
+
+  .login-home-feature-icon {
+    font-size: 1.25rem;
+  }
+
+  .login-home-feature-text {
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-home-main {
+    padding: 1rem 0.5rem;
+    gap: 1.5rem;
+  }
+
+  .login-home-logo-lottie {
+    width: 140px;
+    height: 140px;
+  }
+
+  .login-home-title {
+    font-size: 2.5rem;
+  }
+
+  .login-home-cta-content {
+    height: 3.5rem;
+    padding: 0 1rem;
+  }
+
+  .login-home-cta-text {
+    font-size: 1rem;
+  }
+
+  .login-home-features {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .login-home-feature {
+    width: 100%;
+    max-width: 200px;
+    flex-direction: row;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+
+  .login-home-feature-text {
+    text-align: left;
+  }
+}
 .welcomeLottie{width:280px;height:80px;align-self:center;margin-top:12%}
 
-/* SignIn */
-.header{display:flex;align-items:center;justify-content:space-between;padding:12px 0;width:100%;max-width:520px;margin:0 auto}
-.headerTitle{color:#E5E7EB;font-size:16px;font-weight:600;letter-spacing:.4px}
-.contentCard{display:flex;flex-direction:column;align-items:center;align-self:center;width:100%;max-width:520px;padding:32px 24px;gap:10px}
-.bottomHalf{position:relative;width:100%;padding:0 24px;display:flex;justify-content:center}
-.bottomInner{display:flex;flex-direction:column;align-items:center;width:100%}
-.siTitle{color:#fff;font-size:28px;font-weight:400;letter-spacing:-.3px;margin-top:6px}
-.siSubtitle{color:var(--muted);font-size:15px;line-height:22px;margin:6px 0 20px}
-.googleWrap{border-radius:16px;overflow:hidden;width:100%;max-width:520px}
-.googleGlass{height:56px;border-radius:16px;overflow:hidden;background:rgba(255,255,255,0.06)}
-.googleBtn{display:flex;align-items:center;justify-content:center;height:56px;background:#fff}
-.googleText{font-size:16px;font-weight:600;letter-spacing:1px;color:#000}
-.googleLottie{width:64px;height:64px;margin-left:-20px;margin-right:10px}
-.termsRow{display:flex;align-items:center;gap:8px;margin-top:14px;align-self:flex-start}
-.checkbox{width:18px;height:18px;border-radius:4px;border:1px solid #4B5563;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center}
-.checkbox.checked{border-color:#60A5FA;background:rgba(59,130,246,0.35)}
-.checkbox .tick{width:10px;height:10px;border-radius:2px;background:#fff}
-.termsText{color:#E5E7EB}
-.termsLink{margin-left:6px;color:#93C5FD;cursor:pointer;font-weight:600}
-.safetyRow{display:flex;align-items:center;gap:8px;margin-top:16px;color:#9CA3AF;font-size:12px}
+/* SignIn Page Styles */
+.signin-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(11, 15, 20, 0.95), rgba(5, 5, 5, 0.95), rgba(0, 0, 0, 0.95));
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  position: relative;
+  overflow-x: hidden;
+}
 
-/* Modal (simple) */
-.modalBackdrop{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
-.modalCard{width:100%;max-width:640px;border-radius:16px;overflow:hidden;background:rgba(20,20,20,1);border:1px solid rgba(255,255,255,0.06)}
-.modalHeader{padding:12px 16px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.08)}
-.modalBody{padding:12px 16px;max-height:60vh;overflow:auto}
-.modalFooter{padding:12px 16px}
-.acceptBtn{display:flex;align-items:center;justify-content:center;height:48px;width:100%;border-radius:12px;background:#fff;color:#000;font-weight:600}
+.signin-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 15, 20, 0.95), rgba(5, 5, 5, 0.95), rgba(0, 0, 0, 0.95));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.signin-geo1, .signin-geo2, .signin-geo3 {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.signin-geo1 {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  top: -15%;
+  right: -15%;
+}
+
+.signin-geo2 {
+  width: 180px;
+  height: 180px;
+  left: 10%;
+  bottom: 20%;
+  border-color: rgba(255, 255, 255, 0.05);
+  transform: rotate(45deg);
+}
+
+.signin-geo3 {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  right: 20%;
+  bottom: 10%;
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.signin-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  justify-content: center;
+}
+
+.signin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto 2rem;
+}
+
+.signin-back-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  border-radius: 0.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.signin-back-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.signin-title {
+  color: #e5e7eb;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  margin: 0;
+}
+
+.signin-spacer {
+  width: 2.5rem;
+}
+
+.signin-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  gap: 2rem;
+}
+
+.signin-animation {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.signin-welcome-lottie {
+  width: 280px;
+  height: 80px;
+  align-self: center;
+}
+
+.signin-form {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.signin-form-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 1.5rem;
+}
+
+.signin-heading {
+  color: #ffffff;
+  font-size: 1.75rem;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  margin: 0;
+  text-align: center;
+}
+
+.signin-subtitle {
+  color: #94a3b8;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  margin: 0.375rem 0 1.25rem;
+  text-align: center;
+  max-width: 300px;
+}
+
+.signin-google-wrapper {
+  border-radius: 1rem;
+  overflow: hidden;
+  width: 100%;
+  max-width: 320px;
+}
+
+.signin-google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 3.5rem;
+  background: #ffffff;
+  border: none;
+  border-radius: 1rem;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.signin-google-btn:hover:not(:disabled) {
+  background: #f8f9fa;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.signin-google-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.signin-google-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 0.75rem;
+}
+
+.signin-google-lottie {
+  width: 40px;
+  height: 40px;
+  margin-left: -1.25rem;
+  margin-right: 0.625rem;
+}
+
+.signin-google-text {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  color: #000000;
+}
+
+.signin-terms-row, .signin-remember-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: fit-content;
+  max-width: 320px;
+}
+
+.signin-checkbox-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-width: 1.125rem;
+  min-height: 1.125rem;
+}
+
+.signin-checkbox-input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.signin-checkbox-custom {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 0.25rem;
+  border: 1px solid #4b5563;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.signin-checkbox-container:hover .signin-checkbox-custom {
+  border-color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.signin-checkbox-input:checked + .signin-checkbox-custom {
+  border-color: #60a5fa;
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.signin-checkbox-check {
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.signin-terms-text {
+  color: #e5e7eb;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  flex: 1;
+}
+
+.signin-terms-link {
+  background: none;
+  border: none;
+  color: #93c5fd;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+.signin-terms-link:hover {
+  color: #dbeafe;
+}
+
+.signin-remember-text {
+  color: #e5e7eb;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  flex: 1;
+}
+
+.signin-security-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.signin-security-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+/* Modal Styles */
+.signin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+  backdrop-filter: blur(4px);
+}
+
+.signin-modal {
+  width: 100%;
+  max-width: 640px;
+  background: rgba(20, 22, 28, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.signin-modal-header {
+  padding: 1.5rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.signin-modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 0.25rem 0;
+}
+
+.signin-modal-subtitle {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.signin-modal-body {
+  padding: 1.5rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.signin-terms-content {
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.6;
+}
+
+.signin-terms-content h4 {
+  color: #ffffff;
+  margin: 1.5rem 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.signin-terms-content p {
+  margin: 0 0 1rem 0;
+}
+
+.signin-terms-content ul {
+  margin: 0 0 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.signin-terms-content li {
+  margin-bottom: 0.25rem;
+}
+
+.signin-modal-footer {
+  padding: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: center;
+}
+
+.signin-accept-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 3rem;
+  padding: 0 2rem;
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.signin-accept-btn:hover {
+  background: #f3f4f6;
+  transform: translateY(-1px);
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .signin-main {
+    padding: 1rem 0.5rem;
+  }
+
+  .signin-header {
+    margin-bottom: 1rem;
+  }
+
+  .signin-content {
+    padding: 1.5rem 1rem;
+    gap: 1.5rem;
+  }
+
+  .signin-welcome-lottie {
+    width: 240px;
+    height: 72px;
+  }
+
+  .signin-heading {
+    font-size: 1.5rem;
+  }
+
+  .signin-subtitle {
+    font-size: 0.875rem;
+    max-width: 260px;
+  }
+
+  .signin-google-wrapper {
+    max-width: 100%;
+  }
+
+  .signin-google-btn {
+    height: 3.25rem;
+  }
+
+  .signin-google-lottie {
+    width: 36px;
+    height: 36px;
+    margin-left: -1rem;
+    margin-right: 0.5rem;
+  }
+
+  .signin-google-text {
+    font-size: 0.9375rem;
+  }
+
+  .signin-terms-row, .signin-remember-row {
+    max-width: 100%;
+  }
+
+  .signin-modal {
+    max-width: 95vw;
+    max-height: 85vh;
+  }
+
+  .signin-modal-header, .signin-modal-body, .signin-modal-footer {
+    padding: 1rem;
+  }
+}
 
 /* Responsive tweaks */
 @media (max-width: 520px) {
@@ -104,4 +870,335 @@ body, #root { min-height: 100dvh; }
   .googleGlass{height:52px}
   .googleBtn{height:52px}
   .header{padding:8px 0}
+}
+
+/* Landing Page Styles */
+.landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(11, 15, 20, 0.95), rgba(5, 5, 5, 0.95), rgba(0, 0, 0, 0.95));
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.landing-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 15, 20, 0.95), rgba(5, 5, 5, 0.95), rgba(0, 0, 0, 0.95));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.landing-geo1, .landing-geo2, .landing-geo3 {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.landing-geo1 {
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  top: -20%;
+  left: -20%;
+}
+
+.landing-geo2 {
+  width: 200px;
+  height: 200px;
+  right: 5%;
+  top: 30%;
+  border-color: rgba(255, 255, 255, 0.05);
+  transform: rotate(45deg);
+}
+
+.landing-geo3 {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  left: 15%;
+  bottom: 15%;
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.landing-header {
+  position: relative;
+  z-index: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.landing-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.landing-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.landing-logo-img {
+  width: 28px;
+  height: 28px;
+}
+
+.landing-logo-text {
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.landing-nav {
+  display: flex;
+  gap: 0.625rem;
+}
+
+.landing-btn-primary, .landing-btn-ghost {
+  border-radius: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.landing-btn-primary {
+  background: linear-gradient(135deg, #34d399 0%, #06b6d4 100%);
+  color: #0b0f14;
+}
+
+.landing-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(52, 211, 153, 0.3);
+}
+
+.landing-btn-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.landing-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.landing-main {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.landing-hero {
+  max-width: 960px;
+  width: 100%;
+  text-align: center;
+}
+
+.landing-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.75rem;
+  margin-bottom: 0.875rem;
+}
+
+.landing-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #10b981;
+  display: inline-block;
+}
+
+.landing-title {
+  font-size: 3.5rem;
+  line-height: 1.05;
+  margin: 0 0 0.75rem 0;
+  letter-spacing: -0.025em;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ffffff 0%, #e5e7eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.landing-subtitle {
+  max-width: 680px;
+  margin: 0 auto 1.5rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.landing-cta {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.landing-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.landing-feature {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.landing-feature:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+}
+
+.landing-feature-title {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  color: #ffffff;
+}
+
+.landing-feature-desc {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.landing-footer {
+  position: relative;
+  z-index: 1;
+  padding: 1rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.875rem;
+}
+
+/* Responsive Design for Landing */
+@media (max-width: 768px) {
+  .landing-header-content {
+    padding: 1rem;
+  }
+
+  .landing-main {
+    padding: 1.5rem 1rem;
+  }
+
+  .landing-title {
+    font-size: 2.5rem;
+  }
+
+  .landing-subtitle {
+    font-size: 1rem;
+  }
+
+  .landing-cta {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .landing-btn-primary, .landing-btn-ghost {
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .landing-features {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .landing-feature {
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .landing-title {
+    font-size: 2rem;
+  }
+
+  .landing-status {
+    font-size: 0.6875rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .landing-nav {
+    gap: 0.5rem;
+  }
+
+  .landing-btn-primary, .landing-btn-ghost {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* Settings Page Checkbox Styling */
+input[type="checkbox"] {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 0.25rem;
+  border: 1px solid #4b5563;
+  background: rgba(255, 255, 255, 0.04);
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+  margin: 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+input[type="checkbox"]:checked {
+  border-color: #60a5fa;
+  background: rgba(59, 130, 246, 0.2);
+}
+
+input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+input[type="checkbox"]:hover {
+  border-color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Settings page specific checkbox centering */
+.settings-checkbox-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
 }

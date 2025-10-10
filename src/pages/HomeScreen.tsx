@@ -1,7 +1,7 @@
 import { auth, firestore } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import { Archive, Check, ChevronDown, ChevronLeft, ChevronRight, Edit3, FileText, Image as ImageIcon, Menu, MoreHorizontal, Paperclip, Plus, Send, Settings, Share2, Square, Trash2, Wand2, X } from 'lucide-react';
 import Lottie from 'lottie-react';
+import { Archive, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Lightbulb, Lightbulb as LightbulbIcon, MoreHorizontal, Paperclip, Pencil, Plus, School, Settings, Share2, Square, Trash2, Wand2, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from '../components/Markdown';
@@ -34,8 +34,155 @@ interface AttachedPDF {
   name: string;
 }
 
+// Suggested prompts shown when there are no messages (pill style)
+const BASE_PROMPTS = [
+  {
+    title: 'Make a plan',
+    icon: 'lightbulb-on-outline',
+    iconColor: '#F59E0B',
+    text: 'Help me make a plan for',
+    contextual: [
+      'my weekly meal prep and grocery shopping',
+      'learning a new programming language',
+      'organizing a productive morning routine',
+      'planning a weekend trip itinerary'
+    ]
+  },
+  {
+    title: 'Analyze images',
+    icon: 'eye-outline',
+    iconColor: '#60A5FA',
+    text: 'Analyze this image and describe',
+    contextual: [
+      'the main elements and composition',
+      'the colors, lighting, and mood',
+      'any text or important details visible',
+      'the style and artistic techniques used'
+    ]
+  },
+  {
+    title: 'Summarize',
+    icon: 'file-document-outline',
+    iconColor: '#10B981',
+    text: 'Summarize',
+    contextual: [
+      'my lease agreement into key points',
+      'notes from a meeting I attended',
+      'chapter 1 of a book I\'m reading',
+      'a research paper into main findings'
+    ]
+  },
+  {
+    title: 'Brainstorm',
+    icon: 'lightbulb-outline',
+    iconColor: '#FACC15',
+    text: 'Brainstorm ideas for',
+    contextual: [
+      'a creative birthday party theme',
+      'increasing productivity at work',
+      'a fun weekend project to try',
+      'healthy dinner recipes this week'
+    ]
+  },
+  {
+    title: 'Analyze data',
+    icon: 'chart-box-outline',
+    iconColor: '#38BDF8',
+    text: 'Analyze the following data and highlight patterns',
+    contextual: [
+      'from my monthly expenses spreadsheet',
+      'in my fitness tracking app',
+      'from website traffic analytics',
+      'from customer feedback surveys'
+    ]
+  },
+  {
+    title: 'Help me write',
+    icon: 'pencil-outline',
+    iconColor: '#3B82F6',
+    text: 'Help me write',
+    contextual: [
+      'a professional email to my team',
+      'a compelling social media post',
+      'an engaging product description',
+      'a thoughtful thank you message'
+    ]
+  },
+  {
+    title: 'Get advice',
+    icon: 'school-outline',
+    iconColor: '#8B5CF6',
+    text: 'Give me advice about',
+    contextual: [
+      'choosing the right career path',
+      'improving my communication skills',
+      'managing work-life balance better',
+      'making a difficult personal decision'
+    ]
+  },
+  {
+    title: 'Code',
+    icon: 'code-tags',
+    iconColor: '#93C5FD',
+    text: 'Write code to',
+    contextual: [
+      'create a simple to-do list app',
+      'process and analyze CSV data',
+      'build a responsive navigation menu',
+      'implement user authentication'
+    ]
+  },
+  {
+    title: 'Surprise me',
+    icon: 'dice-5-outline',
+    iconColor: '#A78BFA',
+    text: 'Give me a fun, random task to try.',
+    contextual: []
+  },
+];
+
 export default function HomeScreen() {
   const navigate = useNavigate();
+
+  // Utility function to summarize assistant text for token efficiency
+  const summarizeAssistantText = (text: string): string => {
+    try {
+      const t = String(text || '')
+        // remove chain-of-thought blocks if present
+        .replace(/<think>[\s\S]*?<\/think>/gi, ' ')
+        // strip code fences but keep short hints
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/`([^`]{1,80})`/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!t) return '';
+      // Keep first 1–2 sentences up to ~240 chars (avoid lookbehind for RN compatibility)
+      const sentences = t.match(/[^.!?]+[.!?]?/g) || [t];
+      let out = sentences.slice(0, 2).join(' ').trim();
+      if (out.length > 240) out = out.slice(0, 240).trim();
+      // Ensure brevity indicator
+      return out;
+    } catch { return ''; }
+  };
+
+  // Compress assistant messages in history: keep user messages verbatim; keep only the most recent assistant fully
+  const compressAssistantHistory = (msgs: Message[]): Message[] => {
+    try {
+      if (!Array.isArray(msgs) || msgs.length === 0) return msgs || [];
+      // Find the index of the last assistant message before the last user (or overall if no trailing user)
+      let lastAssistantIdx = -1;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i]?.role === 'assistant') { lastAssistantIdx = i; break; }
+      }
+      return msgs.map((m, idx) => {
+        if (m?.role !== 'assistant') return m; // Keep users/system as-is
+        if (idx === lastAssistantIdx) return m; // Keep the latest assistant as-is
+        const content = summarizeAssistantText(m?.content as string);
+        return { ...m, content: content || '[summary of previous reply]' };
+      });
+    } catch { return msgs || []; }
+  };
+
   // State
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -51,6 +198,7 @@ export default function HomeScreen() {
   const [chatsExpanded, setChatsExpanded] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [avatarError, setAvatarError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [reasoningLevel, setReasoningLevel] = useState<'low' | 'medium' | 'high'>(() => {
     const saved = localStorage.getItem('reasoningLevel');
     return (saved === 'low' || saved === 'medium' || saved === 'high') ? saved : 'medium';
@@ -68,7 +216,12 @@ export default function HomeScreen() {
   
   // Lottie animations state
   const [dotsAnimation, setDotsAnimation] = useState<any>(null);
-  const [switchaiAnimation, setSwitchaiAnimation] = useState<any>(null);
+  
+  // Prompt suggestion state
+  const [showContextualPrompts, setShowContextualPrompts] = useState(false);
+  const [selectedPromptType, setSelectedPromptType] = useState<any>(null);
+  const [showAllPrompts, setShowAllPrompts] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
   
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -120,16 +273,9 @@ export default function HomeScreen() {
   useEffect(() => {
     const loadAnimations = async () => {
       try {
-        const [dotsResponse, switchaiResponse] = await Promise.all([
-          fetch('/animations/dots.json'),
-          fetch('/animations/switchai.json')
-        ]);
-        const [dotsData, switchaiData] = await Promise.all([
-          dotsResponse.json(),
-          switchaiResponse.json()
-        ]);
+        const dotsResponse = await fetch('/animations/dots.json');
+        const dotsData = await dotsResponse.json();
         setDotsAnimation(dotsData);
-        setSwitchaiAnimation(switchaiData);
       } catch (error) {
         console.warn('Failed to load Lottie animations:', error);
       }
@@ -137,9 +283,13 @@ export default function HomeScreen() {
     loadAnimations();
   }, []);
 
-  // Avoid locking html/body overflow here to prevent layout shrink on some browsers
-
-  // Note: avoid locking body overflow to prevent Safari top-stuck glitches.
+  // Clear contextual prompts when input changes significantly
+  useEffect(() => {
+    if (showContextualPrompts && selectedPromptType && input !== selectedPromptType.text) {
+      setShowContextualPrompts(false);
+      setSelectedPromptType(null);
+    }
+  }, [input, showContextualPrompts, selectedPromptType]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -503,7 +653,9 @@ export default function HomeScreen() {
       const sysMsg = isReasoningModel ? { role: 'system', content: `Reasoning effort: ${reasoningLevel}. ${reasoningLevel === 'low' ? 'Prioritize speed and brevity. Provide a concise answer without over-explaining.' : (reasoningLevel === 'high' ? 'Prioritize thoroughness and accuracy. Consider edge cases and provide a well-structured answer. Avoid exposing internal chain-of-thought; share only conclusions.' : 'Balance quality and speed.')}` } : null;
       
       // Build API messages using OCR-enriched content
-      const apiMessagesForApi = [...updatedMessages.slice(0, -1).map(m => ({
+      // Compress chat history to reduce tokens: keep user messages, summarize old assistant messages
+      const compressedHistory = compressAssistantHistory(updatedMessages.slice(0, -1));
+      const apiMessagesForApi = [...compressedHistory.map(m => ({
         role: m.role,
         content: m.content,
       })), {
@@ -708,8 +860,8 @@ export default function HomeScreen() {
   };
 
   // Filter chats
-  const archivedChats = chatHistory.filter((c) => c.archived);
-  const activeChats = chatHistory.filter((c) => !c.archived);
+  const archivedChats = chatHistory.filter((c) => c.archived && (searchQuery === '' || c.title.toLowerCase().includes(searchQuery.toLowerCase()) || (c.lastMessage && c.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()))));
+  const activeChats = chatHistory.filter((c) => !c.archived && (searchQuery === '' || c.title.toLowerCase().includes(searchQuery.toLowerCase()) || (c.lastMessage && c.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()))));
 
   const selectedModelObj = models.find((m) => m.id === selectedModel) || models[0];
   const selectedEntryForReason = models.find((m) => m.id === selectedModel);
@@ -804,6 +956,75 @@ export default function HomeScreen() {
     return null;
   };
 
+  // Prompt suggestion handlers
+  const handleChipClick = async (prompt: any) => {
+    // Special handling for "Surprise me" - send directly
+    if (prompt.title === 'Surprise me') {
+      setInput(prompt.text);
+      await handleSend();
+      return;
+    }
+
+    // For other prompts, set input text and show contextual prompts
+    setInput(prompt.text);
+    setSelectedPromptType(prompt);
+    setShowContextualPrompts(true);
+  };
+
+  const handleContextualPromptClick = async (contextualText: string) => {
+    // Combine the base prompt with the contextual text
+    const fullPrompt = `${selectedPromptType?.text} ${contextualText}`.trim();
+
+    // Clear contextual prompts and input
+    setShowContextualPrompts(false);
+    setSelectedPromptType(null);
+    setInput('');
+
+    // Send the combined message
+    setInput(fullPrompt);
+    await handleSend();
+  };
+
+  const clearContextualPrompts = () => {
+    setShowContextualPrompts(false);
+    setSelectedPromptType(null);
+    setInput('');
+  };
+
+  // Animation functions for smooth expand/collapse
+  const expandPrompts = () => {
+    if (isAnimating) return;
+    setIsAnimating(true);
+    setShowAllPrompts(true);
+    setTimeout(() => setIsAnimating(false), 300);
+  };
+
+  const collapsePrompts = () => {
+    if (isAnimating) return;
+    setIsAnimating(true);
+    setShowAllPrompts(false);
+    setTimeout(() => setIsAnimating(false), 300);
+  };
+
+  // Compute visible prompts (first 6, or all if expanded)
+  const visiblePrompts = showAllPrompts ? BASE_PROMPTS : BASE_PROMPTS.slice(0, 6);
+
+  // Icon mapping from app icon names to lucide-react components
+  const getIconComponent = (iconName: string) => {
+    const iconMap: { [key: string]: any } = {
+      'lightbulb-on-outline': Lightbulb,
+      'eye-outline': Eye,
+      'file-document-outline': FileTextIcon,
+      'lightbulb-outline': LightbulbIcon,
+      'chart-box-outline': BarChart3,
+      'pencil-outline': Pencil,
+      'school-outline': School,
+      'code-tags': Code,
+      'dice-5-outline': Dice5,
+    };
+    return iconMap[iconName] || Lightbulb;
+  };
+
   return (
     <div style={{
       display: 'flex',
@@ -816,13 +1037,46 @@ export default function HomeScreen() {
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       overflow: 'hidden',
       overscrollBehavior: 'none',
+      position: 'relative',
     }}>
+      {/* Geometric elements for depth */}
+      <div style={{
+        position: 'absolute',
+        width: '280px',
+        height: '280px',
+        borderRadius: '140px',
+        border: '1px solid rgba(255, 255, 255, 0.06)',
+        top: '-15%',
+        right: '-15%',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute',
+        width: '180px',
+        height: '180px',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        transform: 'rotate(45deg)',
+        bottom: '20%',
+        left: '10%',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute',
+        width: '120px',
+        height: '120px',
+        borderRadius: '60px',
+        border: '1px solid rgba(255, 255, 255, 0.04)',
+        top: '60%',
+        right: '10%',
+        pointerEvents: 'none',
+      }} />
+
       {/* Outside clicks handled via document listener */}
       {/* Sidebar */}
       <div style={{
         width: sidebarOpen ? '280px' : '0',
         minWidth: sidebarOpen ? '280px' : '0',
-        background: 'rgba(18,20,25,0.9)',
+        background: theme.colors.surfaceAlt,
         borderRight: `1px solid ${theme.colors.border}`,
         display: 'flex',
         flexDirection: 'column',
@@ -836,53 +1090,96 @@ export default function HomeScreen() {
         MozUserSelect: 'none',
         msUserSelect: 'none'
       }}>
-        {/* Sidebar Header: Brand + Collapse */}
-        <div style={{ padding: '12px', borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <img src="/logo.png" alt="SwitchAi" style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 6 }} />
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#e5e7eb' }}>SwitchAi</div>
+        {/* Sidebar Header with Search */}
+        <div style={{ padding: '12px', borderBottom: `1px solid ${theme.colors.border}` }}>
+          
+          {/* Search Bar */}
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', zIndex: 1 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 21L16.5 16.5M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 12px 10px 40px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: '10px',
+                color: theme.colors.text,
+                fontSize: '14px',
+                outline: 'none',
+              }}
+            />
           </div>
-          <button onClick={() => setSidebarOpen(false)} title="Collapse sidebar" style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: `1px solid ${theme.colors.border}`, color: '#e5e7eb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ChevronLeft size={16} />
-          </button>
+        </div>
+
+        {/* Quick Actions */}
+        <div style={{ padding: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <button
+              onClick={handleNewChat}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: '10px',
+                color: theme.colors.text,
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                width: '100%',
+                textAlign: 'left',
+              }}
+            >
+              <Plus size={18} />
+              <span>New chat</span>
+            </button>
+            
+            <button
+              onClick={() => setArchiveExpanded(!archiveExpanded)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: '10px',
+                color: theme.colors.text,
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                width: '100%',
+                textAlign: 'left',
+              }}
+            >
+              <Archive size={18} />
+              <span>Archive</span>
+              <ChevronDown size={16} style={{ marginLeft: 'auto', transform: archiveExpanded ? 'rotate(180deg)' : 'none' }} />
+            </button>
+          </div>
         </div>
 
         {/* Chat History */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
-          {/* New Chat list item */}
-          <div
-            onClick={handleNewChat}
-            onMouseEnter={(e) => {
-              const el = e.currentTarget as HTMLDivElement;
-              el.style.background = 'rgba(255,255,255,0.06)';
-              el.style.border = `1px solid ${theme.colors.border}`;
-            }}
-            onMouseLeave={(e) => {
-              const el = e.currentTarget as HTMLDivElement;
-              el.style.background = 'transparent';
-              el.style.border = '1px solid transparent';
-            }}
-            style={{
-              padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 8,
-              display: 'flex', alignItems: 'center', gap: 10,
-              background: 'transparent', border: '1px solid transparent', color: '#e5e7eb'
-            }}
-          >
-            <Plus size={16} />
-            <span style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>New Chat</span>
-            <ChevronRight size={16} />
-          </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 12px' }}>
           {activeChats.length > 0 && (
             <div style={{ marginBottom: '16px' }}>
-              <div onClick={() => setChatsExpanded(!chatsExpanded)} style={{
-                padding: '8px 12px', color: theme.colors.textMuted,
+              <div style={{
+                padding: '8px 0', color: theme.colors.textMuted,
                 fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
               }}>
-                {chatsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                <span>Chats ({activeChats.length})</span>
+                Chats ({activeChats.length})
               </div>
-              {chatsExpanded && activeChats.map((chat) => (
+              {activeChats.map((chat) => (
                 <div
                   key={chat.id}
                   onMouseEnter={() => setHoveredChatId(chat.id)}
@@ -894,17 +1191,17 @@ export default function HomeScreen() {
                     background: currentChatId === chat.id
                       ? 'rgba(255, 255, 255, 0.08)'
                       : (hoveredChatId === chat.id ? 'rgba(255,255,255,0.06)' : 'transparent'),
-                    border: currentChatId === chat.id ? `1px solid ${theme.colors.border}` : '1px solid transparent',
+                    border: currentChatId === chat.id ? `1px solid ${theme.colors.borderLight}` : '1px solid transparent',
                     display: 'flex', alignItems: 'center', gap: '10px',
                     transition: 'background 0.15s ease',
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: '#e5e7eb', fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ color: theme.colors.text, fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {chat.title}
                     </div>
                     {chat.lastMessage && (
-                      <div style={{ color: theme.colors.textMuted, fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ color: theme.colors.textSecondary, fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {chat.lastMessage}
                       </div>
                     )}
@@ -916,7 +1213,7 @@ export default function HomeScreen() {
                       style={{
                         width: 28, height: 28, borderRadius: 8,
                         background: 'rgba(255,255,255,0.06)', border: `1px solid ${theme.colors.border}`,
-                        color: '#e5e7eb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        color: theme.colors.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
                       }}
                     >
                       <MoreHorizontal size={16} />
@@ -925,23 +1222,23 @@ export default function HomeScreen() {
 
                   {menuOpenChatId === chat.id && (
                     <>
-                      <div ref={menuRef} style={{ position: 'absolute', right: 8, top: 40, zIndex: 1001, background: 'rgba(26,28,34,0.98)', border: `1px solid ${theme.colors.border}`, borderRadius: 10, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }} onClick={(e)=>e.stopPropagation()} onMouseDown={(e)=>e.stopPropagation()}>
-                        <div onClick={() => { closeChatMenu(); handleShareChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color:'#e5e7eb', cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
+                      <div ref={menuRef} style={{ position: 'absolute', right: 8, top: 40, zIndex: 1001, background: theme.colors.surfaceAlt, border: `1px solid ${theme.colors.border}`, borderRadius: 10, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }} onClick={(e)=>e.stopPropagation()} onMouseDown={(e)=>e.stopPropagation()}>
+                        <div onClick={() => { closeChatMenu(); handleShareChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
                           onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.06)'; }}
                           onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='transparent'; }}>
                           <Share2 size={14} /> <span>Share</span>
                         </div>
-                        <div onClick={() => { closeChatMenu(); handleRenameChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color:'#e5e7eb', cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
+                        <div onClick={() => { closeChatMenu(); handleRenameChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
                           onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.06)'; }}
                           onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='transparent'; }}>
                           <Edit3 size={14} /> <span>Rename</span>
                         </div>
-                        <div onClick={() => { closeChatMenu(); handleToggleArchive(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color:'#e5e7eb', cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
+                        <div onClick={() => { closeChatMenu(); handleToggleArchive(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
                           onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.06)'; }}
                           onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='transparent'; }}>
                           <Archive size={14} /> <span>{chat.archived ? 'Unarchive' : 'Archive'}</span>
                         </div>
-                        <div onClick={() => { closeChatMenu(); handleDeleteChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color:'#fca5a5', cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
+                        <div onClick={() => { closeChatMenu(); handleDeleteChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.error, cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
                           onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='rgba(239,68,68,0.12)'; }}
                           onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='transparent'; }}>
                           <Trash2 size={14} /> <span>Delete</span>
@@ -954,16 +1251,14 @@ export default function HomeScreen() {
             </div>
           )}
           
-          {archivedChats.length > 0 && (
+          {archivedChats.length > 0 && archiveExpanded && (
             <div>
-              <div onClick={() => setArchiveExpanded(!archiveExpanded)} style={{
-                padding: '8px 12px', color: theme.colors.textMuted, fontSize: '12px', fontWeight: 700,
-                textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-              }}>
-                {archiveExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                <span>Archived ({archivedChats.length})</span>
+              <div style={{ padding: '8px 0', borderTop: `1px solid ${theme.colors.border}`, marginTop: '12px' }}>
+                <div style={{ color: theme.colors.textMuted, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Archived
+                </div>
               </div>
-              {archiveExpanded && archivedChats.map((chat) => (
+              {archivedChats.map((chat) => (
                 <div
                   key={chat.id}
                   onMouseEnter={() => setHoveredChatId(chat.id)}
@@ -977,7 +1272,7 @@ export default function HomeScreen() {
                     transition: 'background 0.15s ease'
                   }}
                 >
-                  <div style={{ color: '#e5e7eb', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex:1 }}>{chat.title}</div>
+                  <div style={{ color: theme.colors.text, fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex:1 }}>{chat.title}</div>
                   {hoveredChatId === chat.id && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuOpenChatId(chat.id); }}
@@ -1024,10 +1319,10 @@ export default function HomeScreen() {
               )}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#e5e7eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user?.displayName || 'User'}
               </div>
-              <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: '12px', color: theme.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user?.email || 'Not signed in'}
               </div>
             </div>
@@ -1047,51 +1342,36 @@ export default function HomeScreen() {
         height: '100%',
         position: 'relative',
       }}>
-        {/* Header */}
-        <div style={{ 
-          height: '60px', 
-          borderBottom: `1px solid ${theme.colors.border}`, 
-          display: 'flex', 
-          alignItems: 'center', 
-          padding: '0 20px', 
-          gap: '12px',
-          background: 'rgba(0, 0, 0, 0.4)',
-          backdropFilter: 'blur(10px)',
-          flex: '0 0 auto',
-        }}>
-          {!sidebarOpen && (
-            <button onClick={() => setSidebarOpen(true)} style={{
-              width: '36px', height: '36px', 
-              background: 'rgba(255, 255, 255, 0.06)', 
-              border: 'none',
-              borderRadius: '8px', 
-              color: theme.colors.text, 
-              fontSize: '18px', 
-              cursor: 'pointer', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              transition: 'all 0.2s ease',
-            }}><Menu size={18} /></button>
-          )}
-          
-          {/* Logo and Brand */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '10px' 
-          }}>
-            <div style={{
-              fontSize: '18px', 
-              fontWeight: '700',
-              color: theme.colors.text,
-            }}>
-              SwitchAi
-            </div>
-          </div>
-          
-          {/* Chat-level actions moved to sidebar item menus */}
-        </div>
+        {/* Sidebar Toggle Button */}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '20px',
+            zIndex: 10,
+            width: '40px',
+            height: '40px',
+            borderRadius: '10px',
+            background: 'rgba(255, 255, 255, 0.1)',
+            border: `1px solid ${theme.colors.border}`,
+            color: theme.colors.text,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backdropFilter: 'blur(10px)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+          }}
+        >
+          {sidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+        </button>
 
         {/* Messages Area */}
         <div ref={messagesContainerRef} onScroll={handleScroll} style={{ 
@@ -1106,56 +1386,18 @@ export default function HomeScreen() {
           gap: '16px',
           overscrollBehavior: 'contain', // isolate scroll here
           WebkitOverflowScrolling: 'touch',
+          filter: showContextualPrompts ? 'blur(2px)' : 'none',
+          pointerEvents: showContextualPrompts ? 'none' : 'auto',
+          transition: 'filter 0.3s ease',
         }}>
           {messages.length === 0 && !streamingText ? (
             <div style={{
               flex: 1, display: 'flex', flexDirection: 'column', 
               alignItems: 'center', justifyContent: 'center', gap: '20px',
             }}>
-              {/* Logo/Animation */}
+
               <div style={{
-                width: '120px',
-                height: '120px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '10px',
-              }}>
-                {switchaiAnimation ? (
-                  <Lottie
-                    animationData={switchaiAnimation}
-                    loop={true}
-                    autoplay={true}
-                    style={{ width: 120, height: 120 }}
-                  />
-                ) : (
-                  <div style={{
-                    width: '120px',
-                    height: '120px',
-                    background: '#ffffff',
-                    borderRadius: '30px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '20px',
-                    boxShadow: '0 8px 32px rgba(16, 185, 129, 0.3)',
-                  }}>
-                    <img 
-                      src="/logo.png" 
-                      alt="SwitchAi Logo" 
-                      style={{ 
-                        width: '100%', 
-                        height: '100%',
-                        objectFit: 'contain',
-                      }} 
-                    />
-                  </div>
-                )}
-              </div>
-              
-              {/* Brand Name */}
-              <div style={{
-                fontSize: '42px', 
+                fontSize: '48px', 
                 fontWeight: '800',
                 color: theme.colors.text,
               }}>
@@ -1164,7 +1406,7 @@ export default function HomeScreen() {
               
               {/* Tagline */}
               <div style={{ 
-                fontSize: '16px', 
+                fontSize: '18px', 
                 color: theme.colors.textMuted,
                 fontWeight: '500',
               }}>
@@ -1174,31 +1416,90 @@ export default function HomeScreen() {
               {/* Prompt */}
               <div style={{ 
                 fontSize: '20px', 
-                color: '#e5e7eb', 
+                color: theme.colors.textMuted, 
                 marginTop: '20px',
                 fontWeight: '600',
               }}>
                 What can I help with?
               </div>
 
-              {/* Suggestions */}
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6, justifyContent: 'center' }}>
-                {[
-                  'Summarize this article',
-                  'Draft a professional email',
-                  'Explain this code snippet',
-                  'Brainstorm app ideas',
-                ].map(s => (
-                  <button key={s} onClick={() => setInput(prev => (prev ? prev + '\n' : '') + s)}
-                    style={{
-                      padding: '10px 12px', borderRadius: 999,
-                      background: 'rgba(255,255,255,0.08)', border: `1px solid ${theme.colors.border}`,
-                      color: theme.colors.text, cursor: 'pointer', fontSize: 13, fontWeight: 600
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
-                  >{s}</button>
-                ))}
+              {/* Prompt Suggestions */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                gap: 12,
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginTop: 16,
+                maxWidth: '600px',
+                width: '100%',
+              }}>
+                {(() => {
+                  // Build the list to render: visible prompts, plus a More/Show less chip
+                  const items = [...visiblePrompts];
+                  const moreChip = showAllPrompts
+                    ? { title: 'Show less', icon: 'chevron-up-circle-outline', iconColor: '#9CA3AF', text: '', contextual: [] }
+                    : { title: 'More', icon: 'dots-horizontal-circle-outline', iconColor: '#9CA3AF', text: '', contextual: [] };
+                  items.push(moreChip);
+
+                  return items.map((p) => {
+                    const IconComponent = getIconComponent(p.icon);
+                    return (
+                      <button
+                        key={p.title}
+                        onClick={() => {
+                          if (p.title === 'More') {
+                            expandPrompts();
+                          } else if (p.title === 'Show less') {
+                            collapsePrompts();
+                          } else {
+                            handleChipClick(p);
+                          }
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '12px 16px',
+                          borderRadius: 999,
+                          border: `1px solid ${theme.colors.border}`,
+                          background: 'rgba(11, 15, 20, 0.9)',
+                          backdropFilter: 'blur(10px)',
+                          color: '#ffffff',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          fontWeight: 700,
+                          letterSpacing: 0.2,
+                          textShadow: 'rgba(0, 0, 0, 0.5) 0px 1px 1px',
+                          fontFamily: 'SUSE, sans-serif',
+                          transition: 'all 0.2s ease',
+                          whiteSpace: 'nowrap',
+                          width: 'auto',
+                          flexShrink: 0,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(11, 15, 20, 0.9)';
+                          e.currentTarget.style.borderColor = theme.colors.border;
+                        }}
+                      >
+                        <IconComponent size={18} color={p.iconColor} />
+                        <span style={{ 
+                          whiteSpace: 'nowrap',
+                          color: '#ffffff',
+                          fontWeight: 'bold',
+                        }}>
+                          {p.title}
+                        </span>
+                      </button>
+                    );
+                  });
+                })()}
               </div>
             </div>
           ) : (
@@ -1215,8 +1516,8 @@ export default function HomeScreen() {
                   }}
                 >
                   <div style={msg.role === 'user' ? {
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: `1px solid ${theme.colors.border}`,
+                    background: theme.gradients.messageUser[0],
+                    border: `1px solid ${theme.colors.borderLight}`,
                     borderRadius: '24px 24px 24px 24px',
                     padding: '0px 16px',
                     boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
@@ -1313,7 +1614,7 @@ export default function HomeScreen() {
                         animationData={dotsAnimation}
                         loop={true}
                         autoplay={true}
-                        style={{ width: 60, height: 60 }}
+                        style={{ width: 90, height: 90 }}
                       />
                     ) : (
                       <div style={{ display: 'flex', gap: 6 }}>
@@ -1362,9 +1663,115 @@ export default function HomeScreen() {
           background: 'transparent',
           pointerEvents: 'none', // allow messages to scroll beneath, inner card will enable interactions
         }}>
+          {/* Contextual prompts modal */}
+          {showContextualPrompts && selectedPromptType && selectedPromptType.contextual && selectedPromptType.contextual.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '16px',
+                right: '16px',
+                bottom: '180px',
+                zIndex: 200,
+                maxWidth: '900px',
+                margin: '0 auto',
+                pointerEvents: 'auto',
+              }}
+            >
+              <div
+                style={{
+                  background: 'linear-gradient(180deg, rgba(30, 35, 42, 0.98), rgba(20, 24, 28, 0.98))',
+                  borderRadius: '20px',
+                  padding: '20px',
+                  border: `1px solid ${theme.colors.border}`,
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+                  backdropFilter: 'blur(12px)',
+                }}
+              >
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  marginBottom: '16px' 
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {(() => {
+                      const IconComponent = getIconComponent(selectedPromptType.icon);
+                      return <IconComponent size={24} color={selectedPromptType.iconColor} />;
+                    })()}
+                    <span style={{ 
+                      color: theme.colors.text,
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      fontFamily: 'SUSE, sans-serif'
+                    }}>
+                      {selectedPromptType.title}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={clearContextualPrompts}
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '12px',
+                      background: 'rgba(255,255,255,0.08)',
+                      border: 'none',
+                      color: '#9aa',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div style={{ 
+                  color: '#94a3b8',
+                  fontSize: '14px',
+                  marginBottom: '20px',
+                  fontFamily: 'SUSE, sans-serif',
+                  lineHeight: '20px',
+                }}>
+                  Choose a specific task to continue with:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {selectedPromptType.contextual.slice(0, 4).map((contextualText: string, idx: number) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleContextualPromptClick(contextualText)}
+                      style={{
+                        background: 'rgba(255,255,255,0.08)',
+                        padding: '16px',
+                        borderRadius: '12px',
+                        border: `1px solid ${theme.colors.border}`,
+                        color: theme.colors.text,
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        lineHeight: '20px',
+                        fontFamily: 'SUSE, sans-serif',
+                        textAlign: 'left',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                        e.currentTarget.style.borderColor = theme.colors.border;
+                      }}
+                    >
+                      {contextualText}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{ maxWidth: '900px', margin: '0 auto', pointerEvents: 'auto' }}>
             <div style={{ 
-              background: 'rgba(26, 28, 34, 0.85)',
+              background: theme.colors.surfaceAlt,
               border: `1px solid ${theme.colors.border}`,
               borderRadius: '18px',
               boxShadow: '0 16px 40px rgba(0,0,0,0.45)',
@@ -1574,7 +1981,7 @@ export default function HomeScreen() {
                         bottom: '48px',
                         left: 0,
                         minWidth: '200px',
-                        background: 'rgba(17, 24, 39, 0.98)',
+                        background: theme.colors.surfaceAlt,
                         backdropFilter: 'blur(12px)',
                         border: '1px solid rgba(255, 255, 255, 0.12)',
                         borderRadius: '12px',
@@ -1680,15 +2087,15 @@ export default function HomeScreen() {
                       <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowModelPicker(false)} />
                       <div style={{
                         position: 'absolute', bottom: '48px', left: 0, minWidth: '340px', maxWidth: '400px', maxHeight: '440px', overflowY: 'auto',
-                        background: 'rgba(17, 24, 39, 0.98)', backdropFilter: 'blur(12px)',
-                        border: `1px solid rgba(255, 255, 255, 0.12)`,
+                        background: theme.colors.surfaceAlt, backdropFilter: 'blur(12px)',
+                        border: `1px solid ${theme.colors.borderLight}`,
                         borderRadius: '16px', padding: '12px', 
                         boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)', 
                         zIndex: 1000,
                       }}>
                         <div style={{ padding: '12px 8px 16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '12px' }}>
-                          <div style={{ fontSize: '18px', fontWeight: '700', color: '#f3f4f6', marginBottom: '6px', letterSpacing: '-0.02em' }}>Choose Model</div>
-                          <div style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.45)' }}>{models.length} models available</div>
+                          <div style={{ fontSize: '18px', fontWeight: '700', color: theme.colors.text, marginBottom: '6px', letterSpacing: '-0.02em' }}>Choose Model</div>
+                          <div style={{ fontSize: '13px', color: theme.colors.textSecondary }}>{models.length} models available</div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           {models.map((model) => {
@@ -1746,7 +2153,7 @@ export default function HomeScreen() {
                                   <div style={{ 
                                     fontSize: '14px', 
                                     fontWeight: '600', 
-                                    color: '#f3f4f6', 
+                                    color: theme.colors.text, 
                                     marginBottom: '8px',
                                     lineHeight: '1.3'
                                   }}>
@@ -1878,18 +2285,30 @@ export default function HomeScreen() {
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
                   {sending ? (
                     <button onClick={handleStopGeneration} style={{
-                      width: '44px', height: '44px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                      border: 'none', borderRadius: '12px', color: '#fff', fontSize: '16px', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700',
-                    }}><Square size={18} /></button>
+                      minWidth: '75px', height: '35px', paddingHorizontal: '18px',
+                      background: '#fff', border: 'none', borderRadius: '22px', color: '#000',
+                      fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: '700', marginTop: '2px', fontFamily: 'SUSE, sans-serif',
+                    }}><Square size={18} strokeWidth={3} /></button>
                   ) : (
                     <button onClick={handleSend} disabled={!input.trim()} style={{
-                      width: '44px', height: '44px',
-                      background: input.trim() ? theme.colors.primary : 'rgba(255, 255, 255, 0.12)',
-                      border: 'none', borderRadius: '12px', color: '#000', fontSize: '22px',
-                      cursor: input.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      minWidth: '75px',
+                      height: '35px',
+                      paddingHorizontal: '18px',
+                      background: input.trim() ? '#fff' : 'rgba(255, 255, 255, 0.12)',
+                      border: 'none',
+                      borderRadius: '22px',
+                      color: input.trim() ? '#000' : '#fff',
+                      cursor: input.trim() ? 'pointer' : 'not-allowed',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '15px',
+                      fontWeight: '700',
+                      marginTop: '2px',
                       opacity: input.trim() ? 1 : 0.5,
-                    }}><Send size={18} /></button>
+                      fontFamily: 'SUSE, sans-serif',
+                    }}><ArrowUp size={18} strokeWidth={3} /></button>
                   )}
                 </div>
               </div>
@@ -1905,8 +2324,8 @@ export default function HomeScreen() {
           <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(520px, 92vw)' }}>
             <div style={{ background: 'rgba(20,22,28,0.98)', border: `1px solid ${theme.colors.border}`, borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontWeight: 800, color: '#e5e7eb' }}>Rename Chat</div>
-                <button onClick={closeRenameModal} title="Close" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: '#e5e7eb', cursor: 'pointer' }}>×</button>
+                <div style={{ fontWeight: 800, color: theme.colors.text }}>Rename Chat</div>
+                <button onClick={closeRenameModal} title="Close" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: theme.colors.text, cursor: 'pointer' }}>×</button>
               </div>
               <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <label style={{ fontSize: 12, color: theme.colors.textMuted, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase' }}>Title</label>
@@ -1915,10 +2334,10 @@ export default function HomeScreen() {
                   onChange={(e) => setRenameTitle(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && (renameTitle || '').trim()) saveRename(); }}
                   placeholder="Enter a chat title"
-                  style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.04)', color: '#e5e7eb', outline: 'none' }}
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.04)', color: theme.colors.text, outline: 'none' }}
                 />
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 8, alignItems: 'center' }}>
-                  <button onClick={generateTitleWithAI} disabled={renameBusy} title="Generate with AI" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: '#e5e7eb', cursor: renameBusy ? 'not-allowed' : 'pointer', opacity: renameBusy ? 0.6 : 1 }}>
+                  <button onClick={generateTitleWithAI} disabled={renameBusy} title="Generate with AI" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: theme.colors.text, cursor: renameBusy ? 'not-allowed' : 'pointer', opacity: renameBusy ? 0.6 : 1 }}>
                     <Wand2 size={16} />
                     <span>{renameBusy ? 'Generating…' : 'Generate with AI'}</span>
                   </button>

@@ -2,10 +2,9 @@ import { auth, firestore } from '@/lib/firebase';
 import { resetGroqCache } from '@/lib/groqClient';
 import { resetOpenRouterCache } from '@/lib/openRouterClient';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { AlertCircle, Brain, Check, CheckCircle, ChevronDown, ChevronRight, Database, Eye, EyeOff, Info, Key, LogOut, Mail, Phone, RefreshCcw, Rocket, Server, X } from 'lucide-react';
+import { AlertCircle, Brain, CheckCircle, ChevronRight, Database, Eye, EyeOff, Info, Key, LogOut, Mail, Phone, Rocket, Server } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import pkg from '../../package.json';
 import { theme } from '../theme';
 
 export default function SettingsPage() {
@@ -134,11 +133,6 @@ export default function SettingsPage() {
     try { await auth.signOut(); navigate('/login'); } catch {}
   };
 
-  // Modal management: personalizations, data controls, dedicated inference
-  const [activeModal, setActiveModal] = useState<null | 'personalization' | 'data' | 'dedicated' | 'status' | 'about'>(null);
-  const closeModal = () => setActiveModal(null);
-  const [dedicatedTab, setDedicatedTab] = useState<0 | 1 | 2>(0); // 0: Groq, 1: Cerebras, 2: OpenRouter
-
   // Server Status (web modal) — mirrors the app's status page in a compact form
   type ServerStatus = {
     uptime: { formatted: string; days: number };
@@ -171,7 +165,6 @@ export default function SettingsPage() {
       setStatusLoading(false);
     }
   };
-  useEffect(() => { if (activeModal === 'status') fetchStatus(); }, [activeModal]);
   const getHealth = (errRate: string | undefined) => {
     const rate = parseFloat(String(errRate || 'NaN'));
     if (isNaN(rate)) return { label: 'Unknown', color: '#94a3b8', bg: 'rgba(255,255,255,0.06)' };
@@ -265,7 +258,12 @@ export default function SettingsPage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: `linear-gradient(180deg, ${theme.gradients.background.join(', ')})`, color: theme.colors.text }}>
+    <div style={{ minHeight: '100dvh', background: `linear-gradient(180deg, ${theme.gradients.background.join(', ')})`, color: theme.colors.text, position: 'relative' }}>
+      {/* Geometric elements for depth */}
+      <div style={{ position: 'absolute', width: 280, height: 280, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.06)', top: '-15%', right: '-15%' }} />
+      <div style={{ position: 'absolute', width: 180, height: 180, border: '1px solid rgba(255, 255, 255, 0.05)', transform: 'rotate(45deg)', bottom: '20%', left: '10%' }} />
+      <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
+
       <div style={{ height: 60, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)' }}>
         <button onClick={()=>navigate(-1)} style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>{'‹'}</button>
         <div style={{ fontSize: 18, fontWeight: 800 }}>Settings</div>
@@ -295,11 +293,11 @@ export default function SettingsPage() {
 
         {/* App */}
         <Section title="App">
-          <Row icon={<Brain size={18}/>} label="Personalization" sub="Models and preferences" onClick={()=>setActiveModal('personalization')} />
-          <Row icon={<Database size={18}/>} label="Data Controls" sub="Privacy and local data" onClick={()=>setActiveModal('data')} />
-          <Row icon={<Rocket size={18}/>} label="Dedicated Inference" sub="Use your own API keys" onClick={()=>setActiveModal('dedicated')} />
-          <Row icon={<Server size={18}/>} label="Server Status" sub="Infrastructure monitoring" onClick={()=>setActiveModal('status')} />
-          <Row icon={<Info size={18}/>} label="About" onClick={()=>setActiveModal('about')} />
+          <Row icon={<Brain size={18}/>} label="Personalization" sub="Models and preferences" onClick={()=>navigate('/settings/personalization')} />
+          <Row icon={<Database size={18}/>} label="Data Controls" sub="Privacy and local data" onClick={()=>navigate('/settings/data-controls')} />
+          <Row icon={<Rocket size={18}/>} label="Dedicated Inference" sub="Use your own API keys" onClick={()=>navigate('/settings/dedicated-inference')} />
+          <Row icon={<Server size={18}/>} label="Server Status" sub="Infrastructure monitoring" onClick={()=>navigate('/settings/status')} />
+          <Row icon={<Info size={18}/>} label="About" onClick={()=>navigate('/settings/about')} />
         </Section>
 
         {/* Danger zone */}
@@ -315,222 +313,6 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-
-        {/* Modals */}
-        {activeModal && (
-          <div className="modalBackdrop" onClick={closeModal}>
-            <div className="modalCard" style={{ maxWidth: 720 }} onClick={(e)=>e.stopPropagation()}>
-              <div className="modalHeader" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                <div style={{ fontWeight:800, color:'#e5e7eb' }}>
-                  {activeModal === 'personalization' && 'Personalization'}
-                  {activeModal === 'data' && 'Data & Privacy'}
-                  {activeModal === 'dedicated' && 'Dedicated Inference'}
-                  {activeModal === 'status' && 'Infrastructure Status'}
-                  {activeModal === 'about' && 'About'}
-                </div>
-                <button onClick={closeModal} style={{ background:'rgba(255,255,255,0.06)', border:`1px solid ${theme.colors.border}`, borderRadius:8, padding:6, cursor:'pointer', color:'#e5e7eb' }}>
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="modalBody">
-                {activeModal === 'personalization' && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent:'space-between', background: 'rgba(255,255,255,0.04)', border: `1px solid ${theme.colors.border}`, borderRadius: 12, padding: '10px 12px', position: 'relative' }}>
-                      <div>
-                        <div style={{ color:'#e5e7eb', fontWeight:700 }}>Reasoning Effort</div>
-                        <div style={{ color:'#94a3b8', fontSize:12 }}>Set effort for reasoning models</div>
-                      </div>
-                      <div style={{ position: 'relative' }}>
-                        <button onClick={() => setShowReasoningMenu(v => !v)} title="Reasoning level"
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                            background: 'rgba(255,255,255,0.06)', border: `1px solid ${theme.colors.border}`,
-                            borderRadius: '999px', color: theme.colors.text, fontSize: 12, cursor: 'pointer'
-                          }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 999, background: theme.colors.primary, display: 'inline-block' }} />
-                          <span style={{ fontWeight: 700, textTransform: 'capitalize' }}>{reasoningLevel}</span>
-                          <ChevronDown size={14} />
-                        </button>
-                        {showReasoningMenu && (
-                          <div style={{ position: 'absolute', top: '42px', right: 0, background: 'rgba(26,28,34,0.98)', border: `1px solid ${theme.colors.border}`, borderRadius: 10, padding: 6, minWidth: 160, zIndex: 1000 }}>
-                            {(['low','medium','high'] as const).map(lvl => (
-                              <div key={lvl} onClick={() => { setReasoningLevel(lvl); setShowReasoningMenu(false); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: reasoningLevel===lvl? 'rgba(255,255,255,0.06)':'transparent' }}>
-                                <span style={{ textTransform: 'capitalize' }}>{lvl}</span>
-                                {reasoningLevel===lvl && <Check size={14} />}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <label style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'rgba(255,255,255,0.04)', border:`1px solid ${theme.colors.border}`, borderRadius:12, padding:'10px 12px' }}>
-                      <div>
-                        <div style={{ color:'#e5e7eb', fontWeight:700 }}>Math LaTeX Rendering</div>
-                        <div style={{ color:'#94a3b8', fontSize:12 }}>Render all formulas with LaTeX</div>
-                      </div>
-                      <input type="checkbox" checked={mathLatexEnabled} onChange={(e)=>setMathLatexEnabled(e.target.checked)} />
-                    </label>
-                    <label style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'rgba(255,255,255,0.04)', border:`1px solid ${theme.colors.border}`, borderRadius:12, padding:'10px 12px' }}>
-                      <div>
-                        <div style={{ color:'#e5e7eb', fontWeight:700 }}>Use KaTeX Only</div>
-                        <div style={{ color:'#94a3b8', fontSize:12 }}>Experimental: render ALL math with KaTeX</div>
-                      </div>
-                      <input type="checkbox" checked={katexOnlyEnabled} onChange={(e)=>setKatexOnlyEnabled(e.target.checked)} />
-                    </label>
-                  </div>
-                )}
-
-                {activeModal === 'data' && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'rgba(255,255,255,0.04)', border:`1px solid ${theme.colors.border}`, borderRadius:12, padding:'10px 12px' }}>
-                      <div>
-                        <div style={{ color:'#e5e7eb', fontWeight:700 }}>Use data for training</div>
-                        <div style={{ color:'#94a3b8', fontSize:12 }}>Allow anonymous usage to improve model quality</div>
-                      </div>
-                      <input type="checkbox" checked={useForTraining} onChange={(e)=>setUseForTraining(e.target.checked)} />
-                    </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10 }}>
-                      <button onClick={()=>{
-                        if (confirm('Delete all active chats? Archived will be kept.')) {
-                          try {
-                            const raw = localStorage.getItem('switchai_chats');
-                            const list = raw ? JSON.parse(raw) : [];
-                            const toKeep = (Array.isArray(list) ? list : []).filter((c:any)=>!!c?.archived);
-                            localStorage.setItem('switchai_chats', JSON.stringify(toKeep));
-                            alert('Active chats deleted. Archived kept.');
-                          } catch {}
-                        }
-                      }} style={{ background:'rgba(255,255,255,0.06)', border:`1px solid ${theme.colors.border}`, color:'#e7e7eb', borderRadius:12, padding:'10px 12px', cursor:'pointer' }}>
-                        Delete active chats
-                      </button>
-                      <button onClick={()=>{
-                        if (confirm('Delete archived chats only? Active will be kept.')) {
-                          try {
-                            const raw = localStorage.getItem('switchai_chats');
-                            const list = raw ? JSON.parse(raw) : [];
-                            const toKeep = (Array.isArray(list) ? list : []).filter((c:any)=>!c?.archived);
-                            localStorage.setItem('switchai_chats', JSON.stringify(toKeep));
-                            alert('Archived chats deleted. Active kept.');
-                          } catch {}
-                        }
-                      }} style={{ background:'rgba(253, 164, 175, 0.08)', border:'1px solid rgba(253, 164, 175, 0.24)', color:'#fda4af', borderRadius:12, padding:'10px 12px', cursor:'pointer' }}>
-                        Delete archived chats
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {activeModal === 'dedicated' && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                    {/* Tabs */}
-                    <div style={{ display:'flex', gap:8, marginBottom:4 }}>
-                      {['Groq','Cerebras','OpenRouter'].map((t, i) => (
-                        <button key={t} onClick={()=>setDedicatedTab(i as 0|1|2)} style={{ padding:'8px 12px', borderRadius:20, border: '1px solid rgba(255,255,255,0.12)', background: dedicatedTab===i ? '#a5f3fc' : 'transparent', color: dedicatedTab===i ? '#0b0f14' : '#94a3b8', fontWeight:800, cursor:'pointer' }}>{t}</button>
-                      ))}
-                    </div>
-                    {dedicatedTab === 0 && (
-                      <ProviderCard title="Groq" value={groqKey} setValue={setGroqKey} enabled={groqEnabled} hasKey={groqHasKey} setEnabled={setGroqEnabled} looksValid={groqLooksValid} docsUrl="https://console.groq.com/keys" placeholder="gsk_..." />
-                    )}
-                    {dedicatedTab === 1 && (
-                      <ProviderCard title="Cerebras" value={cbKey} setValue={setCbKey} enabled={cbEnabled} hasKey={cbHasKey} setEnabled={setCbEnabled} looksValid={cbLooksValid} docsUrl="https://inference.cerebras.net" placeholder="csk-..." />
-                    )}
-                    {dedicatedTab === 2 && (
-                      <ProviderCard title="OpenRouter" value={orKey} setValue={setOrKey} enabled={orEnabled} hasKey={orHasKey} setEnabled={setOrEnabled} looksValid={orLooksValid} docsUrl="https://openrouter.ai/keys" placeholder="sk-or-..." />
-                    )}
-                  </div>
-                )}
-
-                {activeModal === 'status' && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <div style={{ color:'#94a3b8' }}>Live infrastructure metrics</div>
-                      <button onClick={fetchStatus} disabled={statusLoading} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'8px 10px', borderRadius:8, background:'rgba(255,255,255,0.06)', border:`1px solid ${theme.colors.border}`, color:'#e5e7eb', cursor:'pointer' }}>
-                        <RefreshCcw size={14} /> Refresh
-                      </button>
-                    </div>
-                    {statusError && <div style={{ color:'#ef4444', fontSize:13 }}>{statusError}</div>}
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:12 }}>
-                      {/* AI Processing Card */}
-                      <div style={{ background:'rgba(11,15,20,0.7)', border:`1px solid ${theme.colors.border}`, borderRadius:16, padding:14 }}>
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                            <div style={{ width:28, height:28, borderRadius:8, background:'rgba(59,130,246,0.12)', display:'flex', alignItems:'center', justifyContent:'center', border:`1px solid ${theme.colors.border}` }}>🤖</div>
-                            <div>
-                              <div style={{ color:'#e5e7eb', fontWeight:700 }}>AI Processing</div>
-                              <div style={{ color:'#94a3b8', fontSize:12 }}>Neural inference engine</div>
-                            </div>
-                          </div>
-                          {aiStatus ? (()=>{ const h=getHealth(aiStatus?.today?.errorRate); return <div style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'4px 10px', borderRadius:999, background:h.bg, border:`1px solid rgba(255,255,255,0.12)` }}>
-                            <span style={{ width:8, height:8, borderRadius:999, background:h.color }} />
-                            <span style={{ color:h.color, fontSize:12, fontWeight:700 }}>{h.label}</span>
-                          </div>; })() : <div style={{ color:'#94a3b8', fontSize:12 }}>{statusLoading ? 'Loading…' : 'No data'}</div>}
-                        </div>
-                        {aiStatus && (
-                          <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:8 }}>
-                            <Metric label="TODAY" value={safeNum(aiStatus.today.requests)} />
-                            <Metric label="SUCCESS" value={String(aiStatus.requests.successRate)} />
-                            <Metric label="LATENCY" value={`${safeNum(aiStatus.today.avgProcessingTime)} ms`} />
-                            <Metric label="UPTIME" value={`${safeNum(aiStatus.uptime.days)} days`} />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* OCR Card */}
-                      <div style={{ background:'rgba(11,15,20,0.7)', border:`1px solid ${theme.colors.border}`, borderRadius:16, padding:14 }}>
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                            <div style={{ width:28, height:28, borderRadius:8, background:'rgba(124,58,237,0.12)', display:'flex', alignItems:'center', justifyContent:'center', border:`1px solid ${theme.colors.border}` }}>📄</div>
-                            <div>
-                              <div style={{ color:'#e5e7eb', fontWeight:700 }}>OCR Processing</div>
-                              <div style={{ color:'#94a3b8', fontSize:12 }}>Document analysis engine</div>
-                            </div>
-                          </div>
-                          {ocrStatus ? (()=>{ const h=getHealth(ocrStatus?.today?.errorRate); return <div style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'4px 10px', borderRadius:999, background:h.bg, border:`1px solid rgba(255,255,255,0.12)` }}>
-                            <span style={{ width:8, height:8, borderRadius:999, background:h.color }} />
-                            <span style={{ color:h.color, fontSize:12, fontWeight:700 }}>{h.label}</span>
-                          </div>; })() : <div style={{ color:'#94a3b8', fontSize:12 }}>{statusLoading ? 'Loading…' : 'No data'}</div>}
-                        </div>
-                        {ocrStatus && (
-                          <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:8 }}>
-                            <Metric label="TODAY" value={safeNum(ocrStatus.today.requests)} />
-                            <Metric label="SUCCESS" value={String(ocrStatus.requests.successRate)} />
-                            <Metric label="LATENCY" value={`${safeNum(ocrStatus.today.avgProcessingTime)} ms`} />
-                            <Metric label="PAGES" value={safeNum(ocrStatus.ocr?.totalPagesProcessed ?? 0)} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeModal === 'about' && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:14, alignItems:'center', textAlign:'center' }}>
-                    <div style={{ width:72, height:72, borderRadius:16, padding:8, background:'linear-gradient(135deg,#06b6d4,#7c3aed)' }}>
-                      <img src="/logo.png" alt="SwitchAi" style={{ width:'100%', height:'100%', objectFit:'contain', borderRadius:12, background:'#fff' }} />
-                    </div>
-                    <div style={{ fontSize:22, color:'#e5e7eb', fontWeight:700 }}>SwitchAi</div>
-                    <div style={{ fontSize:12, color:'#94a3b8' }}>Fast, private, and responsive AI</div>
-                    <div style={{ fontSize:13, color:'#cbd5e1', maxWidth:560 }}>SwitchAi gives you lightning-fast answers with privacy-first defaults and a clean, distraction-free chat UI.</div>
-                    <div style={{ marginTop:6, display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, width:'100%', maxWidth:560 }}>
-                      <div style={{ background:'rgba(11,15,20,0.7)', border:`1px solid ${theme.colors.border}`, borderRadius:12, padding:12, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                        <span style={{ color:'#94a3b8', fontSize:12 }}>App</span>
-                        <span style={{ color:'#e5e7eb', fontWeight:700 }}>SwitchAi</span>
-                      </div>
-                      <div style={{ background:'rgba(11,15,20,0.7)', border:`1px solid ${theme.colors.border}`, borderRadius:12, padding:12, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                        <span style={{ color:'#94a3b8', fontSize:12 }}>Version</span>
-                        <span style={{ color:'#e5e7eb', fontWeight:700 }}>{(pkg as any)?.version || '1.0.0'}</span>
-                      </div>
-                    </div>
-                    <div style={{ marginTop:8, color:'#94a3b8', fontSize:12 }}>Built for speed, privacy, and reliability.</div>
-                  </div>
-                )}
-              </div>
-              <div className="modalFooter" style={{ display:'flex', justifyContent:'flex-end' }}>
-                <button onClick={closeModal} className="acceptBtn" style={{ width:'auto', padding:'10px 16px', height:40 }}>Close</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

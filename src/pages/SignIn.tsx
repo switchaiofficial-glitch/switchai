@@ -1,15 +1,17 @@
+import { auth, googleProvider } from '@/lib/firebase';
+import { browserLocalPersistence, browserSessionPersistence, setPersistence, signInWithPopup } from 'firebase/auth';
+import Lottie from 'lottie-react';
+import { Lock } from 'lucide-react';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import Lottie from 'lottie-react';
-import { auth, googleProvider } from '@/lib/firebase';
-import { signInWithPopup, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 
 export default function SignIn() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = React.useState(false);
   const [acceptedTerms, setAcceptedTerms] = React.useState(false);
-  const [rememberMe, setRememberMe] = React.useState(true);
+  const rememberMe = true; // Always remember user (compulsory)
   const [showTerms, setShowTerms] = React.useState(false);
+  const [isTransitioning, setIsTransitioning] = React.useState(false);
 
   const [welcomeAnim, setWelcomeAnim] = React.useState<any>(null);
   const [googleAnim, setGoogleAnim] = React.useState<any>(null);
@@ -20,6 +22,14 @@ export default function SignIn() {
     fetch('/animations/google.json').then(r => r.json()).then(setGoogleAnim).catch(() => {});
     fetch('/animations/googleloading.json').then(r => r.json()).then(setGoogleLoadingAnim).catch(() => {});
   }, []);
+
+  const handleBack = () => {
+    setIsTransitioning(true);
+    // Delay navigation to allow fade-out animation
+    setTimeout(() => {
+      navigate(-1);
+    }, 300);
+  };
 
   const handleGoogle = async () => {
     if (!acceptedTerms) {
@@ -47,64 +57,101 @@ export default function SignIn() {
   };
 
   return (
-    <div className="container">
-      <div className="gradient" />
-      <div className="geo1" />
-      <div className="geo2" />
-      <div className="geo3" />
+    <div className={`signin-container ${isTransitioning ? 'fade-out' : 'fade-in'}`}>
+      {/* Background Elements */}
+      <div className="signin-gradient" />
+      <div className="signin-geo1" />
+      <div className="signin-geo2" />
+      <div className="signin-geo3" />
 
-      <div className="center" style={{ width: '100%' }}>
-        <div className="header">
-          <button onClick={() => navigate(-1)} style={{ background: 'transparent', border: 0, color: '#9CA3AF', cursor: 'pointer' }}>&larr;</button>
-          <div className="headerTitle" style={{ fontFamily: 'SUSE_600SemiBold, Inter, sans-serif' }}>Sign in</div>
-          <div style={{ width: 24 }} />
-        </div>
+      {/* Main Content */}
+      <div className="signin-main">
+        {/* Header */}
+        <header className="signin-header">
+          <button
+            onClick={handleBack}
+            className="signin-back-btn"
+            aria-label="Go back"
+          >
+            ←
+          </button>
+          <h1 className="signin-title">Sign in</h1>
+          <div className="signin-spacer" />
+        </header>
 
-        <div className="contentCard">
-          {welcomeAnim && (
-            <Lottie animationData={welcomeAnim} loop className="welcomeLottie" />
-          )}
+        {/* Content Card */}
+        <div className="signin-content">
+          {/* Welcome Animation */}
+          <div className="signin-animation">
+            {welcomeAnim && (
+              <Lottie
+                animationData={welcomeAnim}
+                loop
+                className="signin-welcome-lottie"
+              />
+            )}
+          </div>
 
-          <div className="bottomHalf">
-            <div className="bottomInner">
-              <div className="siTitle" style={{ fontFamily: 'VarelaRound_400Regular, Varela Round, Inter, sans-serif' }}>Welcome back</div>
-              <div className="siSubtitle" style={{ fontFamily: 'SUSE_400Regular, Inter, sans-serif' }}>
+          {/* Form Section */}
+          <div className="signin-form">
+            <div className="signin-form-content">
+              <p className="signin-subtitle">
                 Continue with Google to get started
+              </p>
+
+              {/* Google Sign In Button */}
+              <div className="signin-google-wrapper">
+                <button
+                  className="signin-google-btn"
+                  onClick={handleGoogle}
+                  disabled={isLoading}
+                  aria-label="Continue with Google"
+                >
+                  <div className="signin-google-content">
+                    <Lottie
+                      animationData={isLoading ? googleLoadingAnim : googleAnim}
+                      loop
+                      className="signin-google-lottie"
+                    />
+                    {!isLoading && (
+                      <span className="signin-google-text">
+                        Continue with Google
+                      </span>
+                    )}
+                  </div>
+                </button>
               </div>
 
-              <div className="googleWrap">
-                <div className="googleGlass">
-                  <button className="googleBtn" onClick={handleGoogle} disabled={isLoading} style={{ width: '100%', border: 0, background: '#fff', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-                      <Lottie animationData={isLoading ? googleLoadingAnim : googleAnim} loop className="googleLottie" />
-                      {!isLoading && (
-                        <span className="googleText" style={{ fontFamily: 'SUSE_600SemiBold, Inter, sans-serif' }}>
-                          Continue with Google
-                        </span>
-                      )}
-                    </div>
+              {/* Terms Checkbox */}
+              <div className="signin-terms-row">
+                <label className="signin-checkbox-container">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="signin-checkbox-input"
+                  />
+                  <span className="signin-checkbox-custom">
+                    {acceptedTerms && <span className="signin-checkbox-check">✓</span>}
+                  </span>
+                </label>
+                <span className="signin-terms-text">
+                  I accept the{' '}
+                  <button
+                    onClick={() => setShowTerms(true)}
+                    className="signin-terms-link"
+                  >
+                    Terms & Conditions
                   </button>
-                </div>
+                </span>
               </div>
 
-              <div className="termsRow">
-                <div className={`checkbox ${acceptedTerms ? 'checked' : ''}`} onClick={() => setAcceptedTerms(v => !v)}>
-                  {acceptedTerms && <div className="tick" />}
-                </div>
-                <span className="termsText" style={{ fontFamily: 'SUSE_400Regular, Inter, sans-serif' }}>I accept the Terms & Conditions</span>
-                <span className="termsLink" onClick={() => setShowTerms(true)} style={{ fontFamily: 'SUSE_600SemiBold, Inter, sans-serif' }}>View terms</span>
-              </div>
-
-              <div className="termsRow" style={{ marginTop: 10 }}>
-                <div className={`checkbox ${rememberMe ? 'checked' : ''}`} onClick={() => setRememberMe(v => !v)}>
-                  {rememberMe && <div className="tick" />}
-                </div>
-                <span className="termsText" style={{ fontFamily: 'SUSE_400Regular, Inter, sans-serif' }}>Remember me on this device</span>
-              </div>
-
-              <div className="safetyRow">
-                <span role="img" aria-label="lock">🔒</span>
-                <span>Your data is protected with Google OAuth</span>
+              {/* Security Notice */}
+              <div className="signin-security-notice">
+                <Lock className="signin-security-icon" size={16} />
+                <span className="signin-security-text">
+                  Your data is protected with Google OAuth
+                </span>
               </div>
             </div>
           </div>
@@ -112,14 +159,15 @@ export default function SignIn() {
       </div>
 
       {showTerms && (
-        <div className="modalBackdrop" onClick={() => setShowTerms(false)}>
-          <div className="modalCard" onClick={(e) => e.stopPropagation()}>
-            <div className="modalHeader">
-              <div style={{ fontWeight: 700 }}>Terms & Conditions</div>
-              <div style={{ color: '#9CA3AF', fontSize: 12, marginTop: 4 }}>Please review before continuing</div>
+        <div className="signin-modal-overlay" onClick={() => setShowTerms(false)}>
+          <div className="signin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="signin-modal-header">
+              <h3 className="signin-modal-title">Terms & Conditions</h3>
+              <p className="signin-modal-subtitle">Please review before continuing</p>
             </div>
-            <div className="modalBody" style={{ color: 'rgba(255,255,255,0.85)' }}>
-              <p>Welcome to SwitchAi. By using this app, you agree to the following terms. SwitchAi provides AI-powered assistance to support legal research and productivity. Outputs may contain errors and should be independently verified.</p>
+            <div className="signin-modal-body">
+              <div className="signin-terms-content">
+                <p>Welcome to SwitchAi. By using this app, you agree to the following terms. SwitchAi provides AI-powered assistance to support legal research and productivity. Outputs may contain errors and should be independently verified.</p>
               <h4>1. Use of Service</h4>
               <ul>
                 <li>You must use SwitchAi lawfully and responsibly. Do not upload unlawful or harmful content.</li>
@@ -140,9 +188,19 @@ export default function SignIn() {
               <p>We may update these terms from time to time. Continued use constitutes acceptance of the revised terms.</p>
               <h4>7. Contact</h4>
               <p>For questions about these terms, contact the SwitchAi team.</p>
+              </div>
             </div>
-            <div className="modalFooter">
-              <button className="acceptBtn" onClick={() => { setAcceptedTerms(true); setShowTerms(false); }}>Accept Terms & Conditions</button>
+
+            <div className="signin-modal-footer">
+              <button
+                className="signin-accept-btn"
+                onClick={() => {
+                  setAcceptedTerms(true);
+                  setShowTerms(false);
+                }}
+              >
+                Accept Terms & Conditions
+              </button>
             </div>
           </div>
         </div>

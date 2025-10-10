@@ -3,12 +3,17 @@ export type WebTheme = {
   colors: {
     background: string;
     surface: string;
+    surfaceAlt: string;
     text: string;
     textMuted: string;
+    textSecondary: string;
     border: string;
+    borderLight: string;
     primary: string;
     primaryMuted: string;
     accentBlue: string;
+    success: string;
+    error: string;
   };
   gradients: {
     background: readonly [string, string, ...string[]];
@@ -22,20 +27,25 @@ export type WebTheme = {
 export const darkTheme: WebTheme = {
   mode: 'dark',
   colors: {
-    background: '#000000',
-    surface: 'rgba(12,12,12,0.82)',
-    text: '#FFFFFF',
-    textMuted: 'rgba(255,255,255,0.75)',
+    background: 'rgba(11, 15, 20, 0.95)',
+    surface: 'rgba(11, 15, 20, 0.7)',
+    surfaceAlt: 'rgba(26, 28, 34, 0.98)',
+    text: '#ffffff',
+    textMuted: '#e5e7eb',
+    textSecondary: '#94a3b8',
     border: 'rgba(255,255,255,0.08)',
-    primary: '#4F46E5',
-    primaryMuted: 'rgba(79,70,229,0.25)',
-    accentBlue: '#3B82F6',
+    borderLight: 'rgba(255,255,255,0.12)',
+    primary: '#10b981',
+    primaryMuted: 'rgba(16,185,129,0.25)',
+    accentBlue: '#3b82f6',
+    success: '#10b981',
+    error: '#ef4444',
   },
   gradients: {
-    background: ['#000000', '#050505', '#0A0A0A'] as const,
-    messageUser: ['rgba(0,0,0,0.60)', 'rgba(0,0,0,0.30)'] as const,
-    messageAssistant: ['rgba(0,0,0,0.45)', 'rgba(0,0,0,0.25)'] as const,
-    accent: ['#6366F1', '#8B5CF6'] as const,
+    background: ['#0b0f14', '#0b0f14', '#111827'] as const,
+    messageUser: ['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.08)'] as const,
+    messageAssistant: ['transparent', 'transparent'] as const,
+    accent: ['#10b981', '#3b82f6'] as const,
   },
   radii: { md: 12, lg: 16, pill: 999 },
 };

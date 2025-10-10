@@ -305,7 +305,6 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             <th style={{ 
               border: `1px solid ${theme.colors.border}`, 
               padding: '10px 14px',
-              background: 'rgba(255,255,255,0.04)',
               fontWeight: '600',
               textAlign: 'left',
               color: theme.colors.text,
