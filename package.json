@@ -9,7 +9,7 @@
     "preview": "vite preview --port 5173"
   },
   "engines": {
-    "node": ">=18.18.0 <20"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "@types/katex": "^0.16.7",
