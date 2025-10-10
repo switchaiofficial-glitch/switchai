@@ -1,6 +1,7 @@
 import { auth, firestore } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { Archive, Check, ChevronDown, ChevronLeft, ChevronRight, Edit3, FileText, Image as ImageIcon, Menu, MoreHorizontal, Paperclip, Plus, Send, Settings, Share2, Square, Trash2, Wand2, X } from 'lucide-react';
+import Lottie from 'lottie-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from '../components/Markdown';
@@ -65,6 +66,10 @@ export default function HomeScreen() {
   const [attachedPDFs, setAttachedPDFs] = useState<AttachedPDF[]>([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   
+  // Lottie animations state
+  const [dotsAnimation, setDotsAnimation] = useState<any>(null);
+  const [switchaiAnimation, setSwitchaiAnimation] = useState<any>(null);
+  
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +114,27 @@ export default function HomeScreen() {
   // Load chat history on mount
   useEffect(() => {
     refreshChatHistory();
+  }, []);
+
+  // Load Lottie animations
+  useEffect(() => {
+    const loadAnimations = async () => {
+      try {
+        const [dotsResponse, switchaiResponse] = await Promise.all([
+          fetch('/animations/dots.json'),
+          fetch('/animations/switchai.json')
+        ]);
+        const [dotsData, switchaiData] = await Promise.all([
+          dotsResponse.json(),
+          switchaiResponse.json()
+        ]);
+        setDotsAnimation(dotsData);
+        setSwitchaiAnimation(switchaiData);
+      } catch (error) {
+        console.warn('Failed to load Lottie animations:', error);
+      }
+    };
+    loadAnimations();
   }, []);
 
   // Avoid locking html/body overflow here to prevent layout shrink on some browsers
@@ -1086,28 +1112,45 @@ export default function HomeScreen() {
               flex: 1, display: 'flex', flexDirection: 'column', 
               alignItems: 'center', justifyContent: 'center', gap: '20px',
             }}>
-              {/* Logo */}
+              {/* Logo/Animation */}
               <div style={{
                 width: '120px',
                 height: '120px',
-                background: '#ffffff',
-                borderRadius: '30px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '20px',
-                boxShadow: '0 8px 32px rgba(16, 185, 129, 0.3)',
                 marginBottom: '10px',
               }}>
-                <img 
-                  src="/logo.png" 
-                  alt="SwitchAi Logo" 
-                  style={{ 
-                    width: '100%', 
-                    height: '100%',
-                    objectFit: 'contain',
-                  }} 
-                />
+                {switchaiAnimation ? (
+                  <Lottie
+                    animationData={switchaiAnimation}
+                    loop={true}
+                    autoplay={true}
+                    style={{ width: 120, height: 120 }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '120px',
+                    height: '120px',
+                    background: '#ffffff',
+                    borderRadius: '30px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '20px',
+                    boxShadow: '0 8px 32px rgba(16, 185, 129, 0.3)',
+                  }}>
+                    <img 
+                      src="/logo.png" 
+                      alt="SwitchAi Logo" 
+                      style={{ 
+                        width: '100%', 
+                        height: '100%',
+                        objectFit: 'contain',
+                      }} 
+                    />
+                  </div>
+                )}
               </div>
               
               {/* Brand Name */}
@@ -1265,14 +1308,23 @@ export default function HomeScreen() {
               {sending && !streamingText && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '900px', width: '100%', margin: '0 auto', gap: 10 }}>
                   <div style={{ padding: '12px 0' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {[0, 0.2, 0.4].map((delay, i) => (
-                        <div key={i} style={{
-                          width: 8, height: 8, borderRadius: 999, background: '#10b981',
-                          animation: 'sa-pulse 1.2s infinite ease-in-out', animationDelay: `${delay}s`,
-                        }} />
-                      ))}
-                    </div>
+                    {dotsAnimation ? (
+                      <Lottie
+                        animationData={dotsAnimation}
+                        loop={true}
+                        autoplay={true}
+                        style={{ width: 60, height: 60 }}
+                      />
+                    ) : (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {[0, 0.2, 0.4].map((delay, i) => (
+                          <div key={i} style={{
+                            width: 8, height: 8, borderRadius: 999, background: '#10b981',
+                            animation: 'sa-pulse 1.2s infinite ease-in-out', animationDelay: `${delay}s`,
+                          }} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
