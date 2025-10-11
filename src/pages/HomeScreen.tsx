@@ -191,7 +191,7 @@ export default function HomeScreen() {
   const [selectedModel, setSelectedModel] = useState('');
   const [models, setModels] = useState<CatalogEntry[]>([]);
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => (typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches) ? false : true);
   const [chatHistory, setChatHistory] = useState<Chat[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [archiveExpanded, setArchiveExpanded] = useState(false);
@@ -230,6 +230,37 @@ export default function HomeScreen() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamBufferRef = useRef<string>('');
   const lastUpdateRef = useRef<number>(0);
+
+  // Mobile detection and responsive sidebar behavior
+  const [isMobile, setIsMobile] = useState<boolean>(() => (typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches));
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 640px)');
+    const handler = (e: any) => {
+      setIsMobile(!!e.matches);
+      if (e.matches) {
+        // Auto-close sidebar when entering mobile viewport
+        setSidebarOpen(false);
+      }
+    };
+    // Initialize
+    handler({ matches: mq.matches });
+    try {
+      mq.addEventListener('change', handler);
+    } catch {
+      // Safari fallback
+      // @ts-ignore
+      mq.addListener(handler);
+    }
+    return () => {
+      try {
+        mq.removeEventListener('change', handler);
+      } catch {
+        // @ts-ignore
+        mq.removeListener(handler);
+      }
+    };
+  }, []);
 
   // Inject keyframes and utility styles once (for typing dots, subtle animations)
   useEffect(() => {
@@ -1074,16 +1105,22 @@ export default function HomeScreen() {
       {/* Outside clicks handled via document listener */}
       {/* Sidebar */}
       <div style={{
-        width: sidebarOpen ? '280px' : '0',
-        minWidth: sidebarOpen ? '280px' : '0',
+        // Overlay full screen on mobile, fixed position
+        position: isMobile ? 'fixed' as const : 'relative' as const,
+        left: isMobile ? 0 : undefined,
+        top: isMobile ? 0 : undefined,
+        width: isMobile ? (sidebarOpen ? '100vw' : '0') : (sidebarOpen ? '280px' : '0'),
+        minWidth: isMobile ? '0' : (sidebarOpen ? '280px' : '0'),
         background: theme.colors.surfaceAlt,
         borderRight: `1px solid ${theme.colors.border}`,
         display: 'flex',
         flexDirection: 'column',
-        transition: 'all 0.3s ease',
+        transition: 'width 0.3s ease',
         overflow: 'hidden',
-        height: '100%',
+        height: isMobile ? '100dvh' : '100%',
         minHeight: 0,
+        zIndex: isMobile ? 1000 : 'auto',
+        pointerEvents: isMobile ? (sidebarOpen ? 'auto' : 'none') : 'auto',
         backdropFilter: 'blur(10px)',
         userSelect: 'none',
         WebkitUserSelect: 'none',
@@ -1091,7 +1128,31 @@ export default function HomeScreen() {
         msUserSelect: 'none'
       }}>
         {/* Sidebar Header with Search */}
-        <div style={{ padding: '12px', borderBottom: `1px solid ${theme.colors.border}` }}>
+        <div style={{ padding: '12px', borderBottom: `1px solid ${theme.colors.border}`, position: 'relative' }}>
+          {isMobile && (
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close sidebar"
+              style={{
+                position: 'absolute',
+                right: 12,
+                top: 12,
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.1)',
+                border: `1px solid ${theme.colors.border}`,
+                color: theme.colors.text,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1,
+              }}
+            >
+              <X size={16} />
+            </button>
+          )}
           
           {/* Search Bar */}
           <div style={{ position: 'relative' }}>

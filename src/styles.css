@@ -1202,3 +1202,23 @@ input[type="checkbox"]:hover {
   min-width: 1.5rem;
   min-height: 1.5rem;
 }
+
+/* Mobile-only interaction tweaks: disable selection and tap highlights */
+@media (max-width: 640px) {
+  html, body {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  *:focus {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+}
