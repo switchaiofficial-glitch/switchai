@@ -264,9 +264,9 @@ export default function SettingsPage() {
       <div style={{ position: 'absolute', width: 180, height: 180, border: '1px solid rgba(255, 255, 255, 0.05)', transform: 'rotate(45deg)', bottom: '20%', left: '10%' }} />
       <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
 
-      <div style={{ height: 60, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)' }}>
-        <button onClick={()=>navigate(-1)} style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>{'‹'}</button>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>Settings</div>
+      <div className="settings-header">
+        <button onClick={()=>navigate(-1)} className="settings-back" aria-label="Go back">‹</button>
+        <div className="settings-header-title">Settings</div>
       </div>
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>

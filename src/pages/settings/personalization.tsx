@@ -15,38 +15,12 @@ export default function PersonalizationPage() {
     return 'medium';
   });
 
-  const [mathLatexEnabled, setMathLatexEnabled] = useState(() => {
-    try {
-      return localStorage.getItem('mathLatexEnabled') === '1';
-    } catch {
-      return false;
-    }
-  });
-
-  const [katexOnlyEnabled, setKatexOnlyEnabled] = useState(() => {
-    try {
-      return localStorage.getItem('katexOnlyEnabled') === '1';
-    } catch {
-      return false;
-    }
-  });
-
   const [showReasoningMenu, setShowReasoningMenu] = useState(false);
 
   // Save functions
   const updateReasoningLevel = (level: 'low' | 'medium' | 'high') => {
     setReasoningLevel(level);
     localStorage.setItem('reasoningLevel', level);
-  };
-
-  const updateMathLatexSetting = (enabled: boolean) => {
-    setMathLatexEnabled(enabled);
-    localStorage.setItem('mathLatexEnabled', enabled ? '1' : '0');
-  };
-
-  const updateKatexOnly = (enabled: boolean) => {
-    setKatexOnlyEnabled(enabled);
-    localStorage.setItem('katexOnlyEnabled', enabled ? '1' : '0');
   };
 
   return (
@@ -57,40 +31,28 @@ export default function PersonalizationPage() {
       <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
 
       {/* Header */}
-      <div style={{ height: 60, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)' }}>
-        <button onClick={() => navigate(-1)} style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          ‹
-        </button>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>Personalization</div>
+      <div className="settings-header">
+        <button onClick={() => navigate(-1)} className="settings-back" aria-label="Go back">‹</button>
+        <div className="settings-header-title">Personalization</div>
       </div>
 
       {/* Content */}
-      <div style={{ padding: 16, maxWidth: 600, margin: '0 auto' }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ color: '#cbd5e1', fontSize: 14, fontWeight: 800, letterSpacing: 0.4, padding: '0 4px', marginBottom: 16 }}>Models & Display</div>
+      <div className="settings-container">
+        <div className="settings-section">
+          <div className="settings-section-title">Models & Display</div>
 
           {/* Reasoning Effort */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.04)', border: `1px solid ${theme.colors.border}`, borderRadius: 12, padding: '10px 12px', position: 'relative', marginBottom: 12 }}>
+          <div className="settings-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', padding: '10px 12px' }}>
             <div>
-              <div style={{ color: '#e5e7eb', fontWeight: 700 }}>Reasoning Effort</div>
-              <div style={{ color: '#94a3b8', fontSize: 12 }}>Set effort for reasoning models</div>
+              <div className="settings-title">Reasoning Effort</div>
+              <div className="settings-subtitle">Set effort for reasoning models</div>
             </div>
             <div style={{ position: 'relative' }}>
               <button
                 onClick={() => setShowReasoningMenu(v => !v)}
                 title="Reasoning level"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 12px',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: '999px',
-                  color: theme.colors.text,
-                  fontSize: 12,
-                  cursor: 'pointer'
-                }}
+                className="btn btn-outline"
+                style={{ borderRadius: 999, padding: '8px 12px', fontSize: 12 }}
               >
                 <span style={{ width: 8, height: 8, borderRadius: 999, background: theme.colors.primary, display: 'inline-block' }} />
                 <span style={{ fontWeight: 700, textTransform: 'capitalize' }}>{reasoningLevel}</span>
@@ -135,52 +97,7 @@ export default function PersonalizationPage() {
             </div>
           </div>
 
-          {/* Math LaTeX Rendering */}
-          <label style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'rgba(255,255,255,0.04)',
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: 12,
-            padding: '10px 12px',
-            marginBottom: 12,
-            cursor: 'pointer'
-          }}>
-            <div>
-              <div style={{ color: '#e5e7eb', fontWeight: 700 }}>Math LaTeX Rendering</div>
-              <div style={{ color: '#94a3b8', fontSize: 12 }}>Render all formulas with LaTeX</div>
-            </div>
-            <input
-              type="checkbox"
-              checked={mathLatexEnabled}
-              onChange={(e) => updateMathLatexSetting(e.target.checked)}
-              style={{ width: 16, height: 16 }}
-            />
-          </label>
-
-          {/* Use KaTeX Only */}
-          <label style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'rgba(255,255,255,0.04)',
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: 12,
-            padding: '10px 12px',
-            cursor: 'pointer'
-          }}>
-            <div>
-              <div style={{ color: '#e5e7eb', fontWeight: 700 }}>Use KaTeX Only</div>
-              <div style={{ color: '#94a3b8', fontSize: 12 }}>Experimental: render ALL math with KaTeX</div>
-            </div>
-            <input
-              type="checkbox"
-              checked={katexOnlyEnabled}
-              onChange={(e) => updateKatexOnly(e.target.checked)}
-              style={{ width: 16, height: 16 }}
-            />
-          </label>
+          {/* Removed KaTeX/LaTeX options as requested */}
         </div>
       </div>
     </div>

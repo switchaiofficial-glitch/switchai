@@ -401,44 +401,44 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
 
             if (!inline && match && isReasoning) {
               return (
-                <details style={{
+                <div style={{
                   margin: '12px 0',
                   borderRadius: 12,
                   border: `1px solid ${theme.colors.border}`,
                   background: 'rgba(255,255,255,0.03)'
                 }}>
-                  <summary style={{
-                    cursor: 'pointer',
-                    userSelect: 'none',
+                  <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '10px 14px',
                     borderBottom: `1px solid ${theme.colors.border}`,
-                    color: theme.colors.text
+                    color: theme.colors.text,
+                    background: 'rgba(255,255,255,0.04)'
                   }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ width: 8, height: 8, borderRadius: 999, background: theme.colors.primary, display: 'inline-block' }} />
                       <strong style={{ fontSize: 12, letterSpacing: 0.4 }}>Reasoning</strong>
                     </span>
-                    <span style={{ opacity: 0.7, fontSize: 12 }}>(click to expand)</span>
-                  </summary>
-                  <pre style={{
-                    margin: 0,
-                    padding: 14,
-                    overflowX: 'auto',
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
-                    color: theme.colors.text,
-                    background: 'transparent'
-                  }}>
-                    {codeString}
-                  </pre>
-                </details>
+                  </div>
+                  <div style={{ maxHeight: 480, overflow: 'auto' }}>
+                    <pre style={{
+                      margin: 0,
+                      padding: 16,
+                      overflowX: 'auto',
+                      fontSize: 14,
+                      lineHeight: 1.6,
+                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                      color: theme.colors.text,
+                      background: 'transparent'
+                    }}>
+                      {codeString}
+                    </pre>
+                  </div>
+                </div>
               );
             }
 
             return !inline && match ? (
-              <details style={{ 
+              <div style={{ 
                 marginBottom: '16px',
                 marginTop: '16px',
                 borderRadius: '12px',
@@ -446,9 +446,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
                 border: `1px solid ${theme.colors.border}`,
                 background: 'rgba(255, 255, 255, 0.03)'
               }}>
-                <summary style={{
-                  cursor: 'pointer',
-                  userSelect: 'none',
+                <div style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -518,26 +516,29 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
                       </>
                     )}
                   </button>
-                </summary>
-                <SyntaxHighlighter
-                  style={vscDarkPlus as any}
-                  language={lang}
-                  PreTag="div"
-                  customStyle={{
-                    margin: 0,
-                    padding: '16px',
-                    background: 'transparent',
-                    fontSize: '14px',
-                    lineHeight: '1.6',
-                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
-                  }}
-                  showLineNumbers={codeString.split('\n').length > 3}
-                  wrapLines
-                  {...props}
-                >
-                  {codeString}
-                </SyntaxHighlighter>
-              </details>
+                </div>
+                <div style={{ maxHeight: 480, overflow: 'auto' }}>
+                  <SyntaxHighlighter
+                    style={vscDarkPlus as any}
+                    language={lang}
+                    PreTag="div"
+                    customStyle={{
+                      margin: 0,
+                      padding: '16px',
+                      background: 'transparent',
+                      fontSize: '14px',
+                      lineHeight: '1.6',
+                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                      minWidth: '100%'
+                    }}
+                    showLineNumbers={codeString.split('\n').length > 3}
+                    wrapLines
+                    {...props}
+                  >
+                    {codeString}
+                  </SyntaxHighlighter>
+                </div>
+              </div>
             ) : (
               // Inline code
               <code

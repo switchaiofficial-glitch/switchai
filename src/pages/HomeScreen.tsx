@@ -1,7 +1,7 @@
 import { auth, firestore } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import Lottie from 'lottie-react';
-import { Archive, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Lightbulb, Lightbulb as LightbulbIcon, MoreHorizontal, Paperclip, Pencil, Plus, School, Settings, Share2, Square, Trash2, Wand2, X } from 'lucide-react';
+import { Archive, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Lightbulb, Lightbulb as LightbulbIcon, MoreHorizontal, Paperclip, Pencil, Plus, School, Settings, Share2, Square, Star, Trash2, Wand2, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from '../components/Markdown';
@@ -190,6 +190,9 @@ export default function HomeScreen() {
   const [streamingText, setStreamingText] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [models, setModels] = useState<CatalogEntry[]>([]);
+  const [favoriteModels, setFavoriteModels] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('favoriteModels') || '[]'); } catch { return []; }
+  });
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => (typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches) ? false : true);
   const [chatHistory, setChatHistory] = useState<Chat[]>([]);
@@ -881,6 +884,20 @@ export default function HomeScreen() {
     setShowModelPicker(false);
   };
 
+  const toggleFavoriteModel = (modelId: string) => {
+    setFavoriteModels((prev) => {
+      const set = new Set(prev);
+      if (set.has(modelId)) {
+        set.delete(modelId);
+      } else {
+        set.add(modelId);
+      }
+      const next = Array.from(set);
+      try { localStorage.setItem('favoriteModels', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -1063,44 +1080,14 @@ export default function HomeScreen() {
       height: '100dvh',
       minHeight: '100svh',
       maxWidth: '100vw',
-      background: `linear-gradient(180deg, ${theme.gradients.background.join(', ')})`,
+      background: theme.colors.background,
       color: theme.colors.text,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       overflow: 'hidden',
       overscrollBehavior: 'none',
       position: 'relative',
     }}>
-      {/* Geometric elements for depth */}
-      <div style={{
-        position: 'absolute',
-        width: '280px',
-        height: '280px',
-        borderRadius: '140px',
-        border: '1px solid rgba(255, 255, 255, 0.06)',
-        top: '-15%',
-        right: '-15%',
-        pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute',
-        width: '180px',
-        height: '180px',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-        transform: 'rotate(45deg)',
-        bottom: '20%',
-        left: '10%',
-        pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute',
-        width: '120px',
-        height: '120px',
-        borderRadius: '60px',
-        border: '1px solid rgba(255, 255, 255, 0.04)',
-        top: '60%',
-        right: '10%',
-        pointerEvents: 'none',
-      }} />
+      {/* Clean background without decorative geometry */}
 
       {/* Outside clicks handled via document listener */}
       {/* Sidebar */}
@@ -1111,7 +1098,7 @@ export default function HomeScreen() {
         top: isMobile ? 0 : undefined,
         width: isMobile ? (sidebarOpen ? '100vw' : '0') : (sidebarOpen ? '280px' : '0'),
         minWidth: isMobile ? '0' : (sidebarOpen ? '280px' : '0'),
-        background: theme.colors.surfaceAlt,
+        background: theme.colors.surface,
         borderRight: `1px solid ${theme.colors.border}`,
         display: 'flex',
         flexDirection: 'column',
@@ -1121,7 +1108,8 @@ export default function HomeScreen() {
         minHeight: 0,
         zIndex: isMobile ? 1000 : 'auto',
         pointerEvents: isMobile ? (sidebarOpen ? 'auto' : 'none') : 'auto',
-        backdropFilter: 'blur(10px)',
+        // Remove heavy blur for a cleaner feel
+        // backdropFilter intentionally removed
         userSelect: 'none',
         WebkitUserSelect: 'none',
         MozUserSelect: 'none',
@@ -1169,9 +1157,9 @@ export default function HomeScreen() {
               style={{
                 width: '100%',
                 padding: '10px 12px 10px 40px',
-                background: 'rgba(255, 255, 255, 0.06)',
+                background: 'rgba(255, 255, 255, 0.05)',
                 border: `1px solid ${theme.colors.border}`,
-                borderRadius: '10px',
+                borderRadius: '12px',
                 color: theme.colors.text,
                 fontSize: '14px',
                 outline: 'none',
@@ -1190,9 +1178,9 @@ export default function HomeScreen() {
                 alignItems: 'center',
                 gap: '12px',
                 padding: '12px',
-                background: 'rgba(255, 255, 255, 0.06)',
+                background: 'rgba(255, 255, 255, 0.05)',
                 border: `1px solid ${theme.colors.border}`,
-                borderRadius: '10px',
+                borderRadius: '12px',
                 color: theme.colors.text,
                 cursor: 'pointer',
                 fontSize: '14px',
@@ -1212,9 +1200,9 @@ export default function HomeScreen() {
                 alignItems: 'center',
                 gap: '12px',
                 padding: '12px',
-                background: 'rgba(255, 255, 255, 0.06)',
+                background: 'rgba(255, 255, 255, 0.05)',
                 border: `1px solid ${theme.colors.border}`,
-                borderRadius: '10px',
+                borderRadius: '12px',
                 color: theme.colors.text,
                 cursor: 'pointer',
                 fontSize: '14px',
@@ -1248,7 +1236,7 @@ export default function HomeScreen() {
                   onClick={() => loadChat(chat.id)}
                   style={{
                     position: 'relative',
-                    padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', marginBottom: '6px',
+                    padding: '10px 12px', borderRadius: '12px', cursor: 'pointer', marginBottom: '6px',
                     background: currentChatId === chat.id
                       ? 'rgba(255, 255, 255, 0.08)'
                       : (hoveredChatId === chat.id ? 'rgba(255,255,255,0.06)' : 'transparent'),
@@ -1362,7 +1350,7 @@ export default function HomeScreen() {
         {/* Account Section */}
         <div style={{ padding: '14px', borderTop: `1px solid ${theme.colors.border}` }}>
           <div onClick={() => navigate('/settings')} style={{
-            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', borderRadius: '10px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', borderRadius: '12px', cursor: 'pointer',
             transition: 'background 0.2s ease',
           }}>
             <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: `1px solid ${theme.colors.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)' }}>
@@ -1413,22 +1401,21 @@ export default function HomeScreen() {
             zIndex: 10,
             width: '40px',
             height: '40px',
-            borderRadius: '10px',
-            background: 'rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            background: 'rgba(255, 255, 255, 0.08)',
             border: `1px solid ${theme.colors.border}`,
             color: theme.colors.text,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backdropFilter: 'blur(10px)',
-            transition: 'all 0.2s ease',
+            transition: 'background 0.15s ease, border-color 0.15s ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
           }}
         >
           {sidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
@@ -1476,10 +1463,10 @@ export default function HomeScreen() {
               
               {/* Prompt */}
               <div style={{ 
-                fontSize: '20px', 
+                fontSize: '18px', 
                 color: theme.colors.textMuted, 
-                marginTop: '20px',
-                fontWeight: '600',
+                marginTop: '16px',
+                fontWeight: 600,
               }}>
                 What can I help with?
               </div>
@@ -1526,26 +1513,23 @@ export default function HomeScreen() {
                           padding: '12px 16px',
                           borderRadius: 999,
                           border: `1px solid ${theme.colors.border}`,
-                          background: 'rgba(11, 15, 20, 0.9)',
-                          backdropFilter: 'blur(10px)',
-                          color: '#ffffff',
+                          background: 'rgba(255, 255, 255, 0.04)',
+                          color: theme.colors.text,
                           cursor: 'pointer',
                           fontSize: 14,
-                          fontWeight: 700,
+                          fontWeight: 600,
                           letterSpacing: 0.2,
-                          textShadow: 'rgba(0, 0, 0, 0.5) 0px 1px 1px',
-                          fontFamily: 'SUSE, sans-serif',
-                          transition: 'all 0.2s ease',
+                          transition: 'background 0.15s ease, border-color 0.15s ease',
                           whiteSpace: 'nowrap',
                           width: 'auto',
                           flexShrink: 0,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
-                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                          e.currentTarget.style.borderColor = theme.colors.borderLight;
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(11, 15, 20, 0.9)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
                           e.currentTarget.style.borderColor = theme.colors.border;
                         }}
                       >
@@ -1577,11 +1561,10 @@ export default function HomeScreen() {
                   }}
                 >
                   <div style={msg.role === 'user' ? {
-                    background: theme.gradients.messageUser[0],
-                    border: `1px solid ${theme.colors.borderLight}`,
-                    borderRadius: '24px 24px 24px 24px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: `1px solid ${theme.colors.border}`,
+                    borderRadius: 16,
                     padding: '0px 16px',
-                    boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
                     maxWidth: '80%'
                   } : {
                     background: 'transparent',
@@ -1706,7 +1689,7 @@ export default function HomeScreen() {
               background: 'rgba(255,255,255,0.08)',
               color: theme.colors.text,
               cursor: 'pointer',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+              // Remove heavy shadow for minimalism
               display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
               <ChevronDown size={18} />
@@ -1832,12 +1815,10 @@ export default function HomeScreen() {
 
           <div style={{ maxWidth: '900px', margin: '0 auto', pointerEvents: 'auto' }}>
             <div style={{ 
-              background: theme.colors.surfaceAlt,
+              background: theme.colors.surface,
               border: `1px solid ${theme.colors.border}`,
-              borderRadius: '18px',
-              boxShadow: '0 16px 40px rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(12px)',
-              padding: '10px',
+              borderRadius: '20px',
+              padding: '14px',
             }}>
               {/* Attachments preview area */}
               {(attachedImages.length > 0 || attachedPDFs.length > 0) && (
@@ -1847,19 +1828,19 @@ export default function HomeScreen() {
                   gap: '8px', 
                   padding: '8px', 
                   marginBottom: '8px',
-                  borderRadius: '12px',
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '14px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: `1px solid ${theme.colors.border}`,
                 }}>
                   {attachedImages.map((img, index) => (
                     <div key={index} style={{ 
                       position: 'relative',
                       width: '80px',
                       height: '80px',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       overflow: 'hidden',
-                      border: '2px solid rgba(99, 102, 241, 0.3)',
-                      background: 'rgba(0, 0, 0, 0.3)',
+                      border: `1px solid ${theme.colors.border}`,
+                      background: 'rgba(255, 255, 255, 0.02)',
                     }}>
                       <img 
                         src={img.dataUrl} 
@@ -1879,9 +1860,9 @@ export default function HomeScreen() {
                           width: '20px',
                           height: '20px',
                           borderRadius: '50%',
-                          background: 'rgba(239, 68, 68, 0.9)',
-                          border: 'none',
-                          color: '#fff',
+                          background: 'rgba(255,255,255,0.14)',
+                          border: `1px solid ${theme.colors.border}`,
+                          color: theme.colors.text,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -1901,9 +1882,9 @@ export default function HomeScreen() {
                       alignItems: 'center',
                       gap: '8px',
                       padding: '12px',
-                      borderRadius: '10px',
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      border: '2px solid rgba(59, 130, 246, 0.3)',
+                      borderRadius: '12px',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: `1px solid ${theme.colors.border}`,
                       minWidth: '200px',
                       maxWidth: '280px',
                     }}>
@@ -1929,9 +1910,9 @@ export default function HomeScreen() {
                           width: '24px',
                           height: '24px',
                           borderRadius: '50%',
-                          background: 'rgba(239, 68, 68, 0.9)',
-                          border: 'none',
-                          color: '#fff',
+                          background: 'rgba(255,255,255,0.14)',
+                          border: `1px solid ${theme.colors.border}`,
+                          color: theme.colors.text,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -1997,10 +1978,10 @@ export default function HomeScreen() {
                     style={{
                       width: '40px', 
                       height: '40px', 
-                      background: (attachedImages.length > 0 || attachedPDFs.length > 0) ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.06)', 
-                      border: (attachedImages.length > 0 || attachedPDFs.length > 0) ? '1px solid rgba(99, 102, 241, 0.5)' : `1px solid ${theme.colors.border}`,
+                      background: 'rgba(255,255,255,0.06)', 
+                      border: `1px solid ${theme.colors.border}`,
                       borderRadius: '10px', 
-                      color: (attachedImages.length > 0 || attachedPDFs.length > 0) ? '#818cf8' : '#fff', 
+                      color: theme.colors.text, 
                       cursor: 'pointer', 
                       display: 'flex', 
                       alignItems: 'center', 
@@ -2017,8 +1998,8 @@ export default function HomeScreen() {
                         width: '18px',
                         height: '18px',
                         borderRadius: '50%',
-                        background: '#6366f1',
-                        color: '#fff',
+                        background: 'rgba(255,255,255,0.14)',
+                        color: theme.colors.text,
                         fontSize: '10px',
                         fontWeight: '700',
                         display: 'flex',
@@ -2041,15 +2022,23 @@ export default function HomeScreen() {
                         position: 'absolute',
                         bottom: '48px',
                         left: 0,
-                        minWidth: '200px',
+                        minWidth: '240px',
                         background: theme.colors.surfaceAlt,
-                        backdropFilter: 'blur(12px)',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        borderRadius: '12px',
-                        padding: '8px',
-                        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
-                        zIndex: 999,
+                        border: `1px solid ${theme.colors.border}`,
+                        borderRadius: '16px',
+                        padding: '10px',
+                        zIndex: 1500,
                       }}>
+                        <div style={{
+                          padding: '6px 8px 10px',
+                          borderBottom: `1px solid ${theme.colors.border}`,
+                          marginBottom: '8px',
+                          color: theme.colors.text,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          letterSpacing: '.05em',
+                          textTransform: 'uppercase'
+                        }}>Attach files</div>
                         <button
                           onClick={() => {
                             document.getElementById('image-picker')?.click();
@@ -2058,13 +2047,13 @@ export default function HomeScreen() {
                           disabled={attachedImages.length >= 5}
                           style={{
                             width: '100%',
-                            padding: '12px',
+                            padding: '10px 12px',
                             background: 'transparent',
                             border: 'none',
-                            color: attachedImages.length >= 5 ? 'rgba(255, 255, 255, 0.3)' : '#fff',
+                            color: attachedImages.length >= 5 ? 'rgba(255, 255, 255, 0.3)' : theme.colors.text,
                             textAlign: 'left',
                             cursor: attachedImages.length >= 5 ? 'not-allowed' : 'pointer',
-                            borderRadius: '8px',
+                            borderRadius: '10px',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '12px',
@@ -2096,13 +2085,13 @@ export default function HomeScreen() {
                           disabled={attachedPDFs.length >= 5}
                           style={{
                             width: '100%',
-                            padding: '12px',
+                            padding: '10px 12px',
                             background: 'transparent',
                             border: 'none',
-                            color: attachedPDFs.length >= 5 ? 'rgba(255, 255, 255, 0.3)' : '#fff',
+                            color: attachedPDFs.length >= 5 ? 'rgba(255, 255, 255, 0.3)' : theme.colors.text,
                             textAlign: 'left',
                             cursor: attachedPDFs.length >= 5 ? 'not-allowed' : 'pointer',
-                            borderRadius: '8px',
+                            borderRadius: '10px',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '12px',
@@ -2146,173 +2135,84 @@ export default function HomeScreen() {
                   {showModelPicker && (
                     <>
                       <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowModelPicker(false)} />
-                      <div style={{
-                        position: 'absolute', bottom: '48px', left: 0, minWidth: '340px', maxWidth: '400px', maxHeight: '440px', overflowY: 'auto',
-                        background: theme.colors.surfaceAlt, backdropFilter: 'blur(12px)',
-                        border: `1px solid ${theme.colors.borderLight}`,
-                        borderRadius: '16px', padding: '12px', 
-                        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)', 
-                        zIndex: 1000,
-                      }}>
-                        <div style={{ padding: '12px 8px 16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '12px' }}>
+                      <div style={{ position: 'absolute', bottom: '48px', left: 0, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: theme.colors.surfaceAlt, border: `1px solid ${theme.colors.border}`, borderRadius: '16px', padding: '12px', zIndex: 1500 }}>
+                        <div style={{ padding: '12px 8px 12px', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: '12px' }}>
                           <div style={{ fontSize: '18px', fontWeight: '700', color: theme.colors.text, marginBottom: '6px', letterSpacing: '-0.02em' }}>Choose Model</div>
                           <div style={{ fontSize: '13px', color: theme.colors.textSecondary }}>{models.length} models available</div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          {models.map((model) => {
-                            // Get inference name - default to 'groq' if not specified
+                        {(() => {
+                          const favoritesSet = new Set(favoriteModels);
+                          const byProvider = (prov: string) => models.filter(m => (m.inference || 'groq').toLowerCase() === prov.toLowerCase());
+                          const favorites = models.filter(m => favoritesSet.has(m.id));
+                          const groq = byProvider('groq');
+                          const cerebras = byProvider('cerebras');
+                          const openrouter = byProvider('openrouter');
+
+                          const Card = ({ model }: { model: CatalogEntry }) => {
                             const inferenceName = model.inference || 'groq';
-                            // Capitalize first letter for display
                             const inferenceDisplay = inferenceName.charAt(0).toUpperCase() + inferenceName.slice(1);
-                            
-                            // Color coding for different inference providers
                             const inferenceColors: Record<string, { bg: string; text: string }> = {
                               groq: { bg: 'rgba(249, 115, 22, 0.15)', text: '#fb923c' },
                               mistral: { bg: 'rgba(139, 92, 246, 0.15)', text: '#a78bfa' },
                               cerebras: { bg: 'rgba(236, 72, 153, 0.15)', text: '#f472b6' },
                               openrouter: { bg: 'rgba(59, 130, 246, 0.15)', text: '#60a5fa' },
                             };
-                            
                             const inferenceStyle = inferenceColors[inferenceName.toLowerCase()] || inferenceColors.groq;
-                            
+                            const isFav = favoritesSet.has(model.id);
                             return (
-                              <div 
-                                key={model.id} 
-                                onClick={() => handleModelSelect(model.id)} 
-                                style={{
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  gap: '12px', 
-                                  padding: '14px 12px', 
-                                  borderRadius: '12px', 
-                                  cursor: 'pointer',
-                                  background: selectedModel === model.id 
-                                    ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(147, 51, 234, 0.08) 100%)' 
-                                    : 'rgba(255, 255, 255, 0.02)',
-                                  border: selectedModel === model.id 
-                                    ? '1.5px solid rgba(59, 130, 246, 0.4)' 
-                                    : '1px solid rgba(255, 255, 255, 0.06)',
-                                  transition: 'all 0.2s ease',
-                                  boxShadow: selectedModel === model.id 
-                                    ? '0 4px 12px rgba(59, 130, 246, 0.15)' 
-                                    : 'none',
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (selectedModel !== model.id) {
-                                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (selectedModel !== model.id) {
-                                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-                                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
-                                  }
-                                }}
+                              <div
+                                onClick={() => handleModelSelect(model.id)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 12px', borderRadius: '12px', cursor: 'pointer', background: selectedModel === model.id ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)', border: selectedModel === model.id ? '1.5px solid rgba(255,255,255,0.16)' : '1px solid rgba(255,255,255,0.06)', transition: 'background 0.15s ease, border-color 0.15s ease' }}
+                                onMouseEnter={(e) => { if (selectedModel !== model.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; } }}
+                                onMouseLeave={(e) => { if (selectedModel !== model.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; } }}
                               >
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ 
-                                    fontSize: '14px', 
-                                    fontWeight: '600', 
-                                    color: theme.colors.text, 
-                                    marginBottom: '8px',
-                                    lineHeight: '1.3'
-                                  }}>
-                                    {model.label}
-                                  </div>
+                                  <div style={{ fontSize: '14px', fontWeight: '600', color: theme.colors.text, marginBottom: '8px', lineHeight: '1.3' }}>{model.label}</div>
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                    {/* Inference Badge - Always show */}
-                                    <span style={{
-                                      fontSize: '11px', 
-                                      fontWeight: '600',
-                                      padding: '4px 8px', 
-                                      borderRadius: '8px',
-                                      background: inferenceStyle.bg,
-                                      color: inferenceStyle.text,
-                                      border: `1px solid ${inferenceStyle.text}33`,
-                                      textTransform: 'capitalize',
-                                      letterSpacing: '0.02em'
-                                    }}>
-                                      ⚡ {inferenceDisplay}
-                                    </span>
-                                    
-                                    {/* Type Badge */}
-                                    <span style={{
-                                      fontSize: '10px', 
-                                      fontWeight: '500',
-                                      padding: '3px 7px', 
-                                      borderRadius: '6px',
-                                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                                      background: 'rgba(255, 255, 255, 0.05)',
-                                      color: 'rgba(255, 255, 255, 0.6)',
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.05em'
-                                    }}>
-                                      {model.type}
-                                    </span>
-                                    
-                                    {/* Provider Badge */}
-                                    <span style={{ 
-                                      fontSize: '10px', 
-                                      fontWeight: '500',
-                                      padding: '3px 7px', 
-                                      borderRadius: '6px', 
-                                      background: 'rgba(148, 163, 184, 0.15)', 
-                                      color: '#94a3b8',
-                                      border: '1px solid rgba(148, 163, 184, 0.2)'
-                                    }}>
-                                      {model.provider || getProviderName(model.id)}
-                                    </span>
-                                    
-                                    {/* Reasoning Badge */}
-                                    {model.hasReasoning && (
-                                      <span style={{ 
-                                        fontSize: '10px', 
-                                        fontWeight: '500',
-                                        padding: '3px 7px', 
-                                        borderRadius: '6px', 
-                                        background: 'rgba(168, 85, 247, 0.15)', 
-                                        color: '#a78bfa',
-                                        border: '1px solid rgba(168, 85, 247, 0.25)'
-                                      }}>
-                                        💡 Reasoning
-                                      </span>
-                                    )}
-                                    
-                                    {/* Vision Badge */}
-                                    {model.supportsVision && (
-                                      <span style={{ 
-                                        fontSize: '10px', 
-                                        fontWeight: '500',
-                                        padding: '3px 7px', 
-                                        borderRadius: '6px', 
-                                        background: 'rgba(34, 197, 94, 0.15)', 
-                                        color: '#4ade80',
-                                        border: '1px solid rgba(34, 197, 94, 0.25)'
-                                      }}>
-                                        👁️ Vision
-                                      </span>
-                                    )}
+                                    <span style={{ fontSize: '11px', fontWeight: '600', padding: '4px 8px', borderRadius: '8px', background: inferenceStyle.bg, color: inferenceStyle.text, border: `1px solid ${inferenceStyle.text}33`, textTransform: 'capitalize', letterSpacing: '0.02em' }}>⚡ {inferenceDisplay}</span>
+                                    <span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.12)', background: 'rgba(255, 255, 255, 0.05)', color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{model.type}</span>
+                                    <span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.2)' }}>{model.provider || getProviderName(model.id)}</span>
+                                    {model.hasReasoning && (<span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa', border: '1px solid rgba(168, 85, 247, 0.25)' }}>💡 Reasoning</span>)}
+                                    {model.supportsVision && (<span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.25)' }}>👁️ Vision</span>)}
                                   </div>
                                 </div>
+                                <button onClick={(e) => { e.stopPropagation(); toggleFavoriteModel(model.id); }} title={isFav ? 'Remove from favorites' : 'Add to favorites'} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: isFav ? '#facc15' : theme.colors.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                                  <Star size={16} fill={isFav ? '#facc15' : 'transparent'} />
+                                </button>
                                 {selectedModel === model.id && (
-                                  <div style={{
-                                    width: '20px',
-                                    height: '20px',
-                                    borderRadius: '50%',
-                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    flexShrink: 0
-                                  }}>
+                                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                     <Check size={12} color="#fff" strokeWidth={3} />
                                   </div>
                                 )}
                               </div>
                             );
-                          })}
-                        </div>
+                          };
+
+                          const Section = ({ title, items }: { title: string; items: CatalogEntry[] }) => (
+                            items.length === 0 ? null : (
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '.05em', margin: '8px 4px' }}>{title}</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  {items.map(m => <Card key={m.id} model={m} />)}
+                                </div>
+                              </div>
+                            )
+                          );
+
+                          const favoritesSorted = models.filter(m => favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                          const groqSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'groq' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                          const cerebrasSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'cerebras' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                          const openrouterSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'openrouter' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+
+                          return (
+                            <>
+                              <Section title="Favorites" items={favoritesSorted} />
+                              <Section title="Groq" items={groqSorted} />
+                              <Section title="Cerebras" items={cerebrasSorted} />
+                              <Section title="OpenRouter" items={openrouterSorted} />
+                            </>
+                          );
+                        })()}
                       </div>
                     </>
                   )}
@@ -2331,14 +2231,18 @@ export default function HomeScreen() {
                       <ChevronDown size={14} />
                     </button>
                     {showReasoningMenu && (
-                      <div style={{ position: 'absolute', bottom: '44px', left: 0, background: 'rgba(26,28,34,0.98)', border: `1px solid ${theme.colors.border}`, borderRadius: 10, padding: 6, minWidth: 160, zIndex: 1000 }}>
-                        {(['low','medium','high'] as const).map(lvl => (
-                          <div key={lvl} onClick={() => setReasoning(lvl)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: reasoningLevel===lvl? 'rgba(255,255,255,0.06)':'transparent' }}>
-                            <span style={{ textTransform: 'capitalize' }}>{lvl}</span>
-                            {reasoningLevel===lvl && <Check size={14} />}
-                          </div>
-                        ))}
-                      </div>
+                      <>
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 1499 }} onClick={() => setShowReasoningMenu(false)} />
+                        <div style={{ position: 'absolute', bottom: '44px', left: 0, background: theme.colors.surfaceAlt, border: `1px solid ${theme.colors.border}`, borderRadius: 14, padding: 10, minWidth: 200, zIndex: 1500 }}>
+                          <div style={{ padding: '2px 4px 8px', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: 8, color: theme.colors.textSecondary, fontSize: 12, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase' }}>Reasoning</div>
+                          {(['low','medium','high'] as const).map(lvl => (
+                            <div key={lvl} onClick={() => setReasoning(lvl)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', background: reasoningLevel===lvl? 'rgba(255,255,255,0.06)':'transparent' }}>
+                              <span style={{ textTransform: 'capitalize' }}>{lvl}</span>
+                              {reasoningLevel===lvl && <Check size={14} />}
+                            </div>
+                          ))}
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -2347,20 +2251,24 @@ export default function HomeScreen() {
                   {sending ? (
                     <button onClick={handleStopGeneration} style={{
                       minWidth: '75px', height: '35px', paddingLeft: '18px', paddingRight: '18px',
-                      background: '#fff', border: 'none', borderRadius: '22px', color: '#000',
+                      background: 'transparent', border: `1px solid ${theme.colors.border}`, borderRadius: '22px', color: theme.colors.text,
                       fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontWeight: '700', marginTop: '2px', fontFamily: 'SUSE, sans-serif',
-                    }}><Square size={18} strokeWidth={3} /></button>
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    ><Square size={18} strokeWidth={3} /></button>
                   ) : (
                     <button onClick={handleSend} disabled={!input.trim()} style={{
                       minWidth: '75px',
                       height: '35px',
                       paddingLeft: '18px',
                       paddingRight: '18px',
-                      background: input.trim() ? '#fff' : 'rgba(255, 255, 255, 0.12)',
-                      border: 'none',
+                      background: 'transparent',
+                      border: `1px solid ${input.trim() ? theme.colors.primary : theme.colors.border}`,
                       borderRadius: '22px',
-                      color: input.trim() ? '#000' : '#fff',
+                      color: input.trim() ? theme.colors.primary : theme.colors.textSecondary,
                       cursor: input.trim() ? 'pointer' : 'not-allowed',
                       display: 'flex',
                       alignItems: 'center',
@@ -2368,9 +2276,19 @@ export default function HomeScreen() {
                       fontSize: '15px',
                       fontWeight: '700',
                       marginTop: '2px',
-                      opacity: input.trim() ? 1 : 0.5,
+                      opacity: input.trim() ? 1 : 0.6,
                       fontFamily: 'SUSE, sans-serif',
-                    }}><ArrowUp size={18} strokeWidth={3} /></button>
+                      transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (input.trim()) {
+                        e.currentTarget.style.background = 'rgba(16,185,129,0.08)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  ><ArrowUp size={18} strokeWidth={3} /></button>
                   )}
                 </div>
               </div>

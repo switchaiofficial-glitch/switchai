@@ -39,80 +39,32 @@ export default function App() {
       <div style={{
         position: 'fixed',
         inset: 0,
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
+        background: '#ffffff',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
-        overflow: 'hidden',
       }}>
-        {/* Animated background elements */}
-        <div style={{
-          position: 'absolute',
-          top: '20%',
-          left: '10%',
-          width: '60px',
-          height: '60px',
-          background: 'radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%)',
-          borderRadius: '50%',
-          animation: 'float 6s ease-in-out infinite',
-        }} />
-        <div style={{
-          position: 'absolute',
-          bottom: '25%',
-          right: '15%',
-          width: '40px',
-          height: '40px',
-          background: 'radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%)',
-          borderRadius: '50%',
-          animation: 'float 8s ease-in-out infinite reverse',
-        }} />
-
         {/* Main content */}
         <div style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          zIndex: 1,
-          animation: 'fadeIn 0.8s ease-out',
         }}>
-          {/* Logo container with glow effect */}
+          {/* Logo */}
           <div style={{
-            position: 'relative',
             marginBottom: '24px',
           }}>
-            <div style={{
-              width: '80px',
-              height: '80px',
-              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-              borderRadius: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px',
-              boxShadow: '0 8px 32px rgba(16, 185, 129, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)',
-              animation: 'pulse 2s ease-in-out infinite',
-            }}>
-              <img
-                src="/logo.png"
-                alt="SwitchAi Logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                }}
-              />
-            </div>
-            {/* Subtle glow ring */}
-            <div style={{
-              position: 'absolute',
-              inset: '-4px',
-              borderRadius: '24px',
-              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(59, 130, 246, 0.2))',
-              zIndex: -1,
-              animation: 'rotate 10s linear infinite',
-            }} />
+            <img
+              src="/logo.png"
+              alt="SwitchAi Logo"
+              style={{
+                width: '80px',
+                height: '80px',
+                objectFit: 'contain',
+              }}
+            />
           </div>
 
           {/* Brand text */}
@@ -123,18 +75,15 @@ export default function App() {
             <h1 style={{
               fontSize: '28px',
               fontWeight: '700',
-              color: '#f8fafc',
+              color: '#000000',
               margin: '0 0 4px 0',
-              letterSpacing: '-0.02em',
-              textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
             }}>
               SwitchAi
             </h1>
             <p style={{
               fontSize: '16px',
-              color: 'rgba(255, 255, 255, 0.7)',
+              color: '#666666',
               margin: 0,
-              fontWeight: '400',
             }}>
               Initializing your experience...
             </p>
@@ -145,26 +94,25 @@ export default function App() {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            marginTop: '8px',
           }}>
             <div style={{
-              width: '4px',
-              height: '4px',
-              background: 'rgba(16, 185, 129, 0.8)',
+              width: '8px',
+              height: '8px',
+              background: '#cccccc',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out infinite both',
             }} />
             <div style={{
-              width: '4px',
-              height: '4px',
-              background: 'rgba(16, 185, 129, 0.8)',
+              width: '8px',
+              height: '8px',
+              background: '#cccccc',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out 0.2s infinite both',
             }} />
             <div style={{
-              width: '4px',
-              height: '4px',
-              background: 'rgba(16, 185, 129, 0.8)',
+              width: '8px',
+              height: '8px',
+              background: '#cccccc',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out 0.4s infinite both',
             }} />
@@ -173,22 +121,6 @@ export default function App() {
 
         {/* CSS animations */}
         <style>{`
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-          }
-          @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(180deg); }
-          }
-          @keyframes rotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
           @keyframes bounce {
             0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
             40% { transform: scale(1); opacity: 1; }

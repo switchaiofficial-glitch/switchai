@@ -64,13 +64,7 @@ function ProviderCard({
   };
 
   return (
-    <div style={{
-      background: 'rgba(11, 15, 20, 0.7)',
-      borderRadius: 16,
-      padding: 16,
-      border: `1px solid ${theme.colors.border}`,
-      marginBottom: 16
-    }}>
+    <div className="settings-card" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
@@ -123,16 +117,8 @@ function ProviderCard({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={placeholder}
-            style={{
-              width: '100%',
-              background: 'rgba(255,255,255,0.04)',
-              border: `1px solid ${looksValid ? theme.colors.border : 'rgba(239,68,68,0.5)'}`,
-              borderRadius: 8,
-              padding: '10px 40px 10px 12px',
-              color: '#e5e7eb',
-              fontSize: 14,
-              outline: 'none'
-            }}
+            className="input"
+            style={{ paddingRight: 40, borderColor: looksValid ? undefined : 'rgba(239,68,68,0.5)' }}
           />
           <button
             onClick={() => setShowKey(!showKey)}
@@ -167,19 +153,8 @@ function ProviderCard({
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={() => window.open(docsUrl, '_blank')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'rgba(59,130,246,0.08)',
-              border: '1px solid rgba(59,130,246,0.3)',
-              color: '#93c5fd',
-              borderRadius: 8,
-              padding: '8px 12px',
-              fontSize: 12,
-              fontWeight: 800,
-              cursor: 'pointer'
-            }}
+            className="btn btn-outline"
+            style={{ fontSize: 12, padding: '8px 12px' }}
           >
             <ExternalLink size={12} />
             Docs
@@ -188,20 +163,8 @@ function ProviderCard({
           <button
             onClick={onSave}
             disabled={saving || !looksValid}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: looksValid ? '#10b981' : 'rgba(255,255,255,0.06)',
-              border: `1px solid ${looksValid ? 'rgba(16,185,129,0.5)' : theme.colors.border}`,
-              color: looksValid ? '#fff' : '#94a3b8',
-              borderRadius: 8,
-              padding: '8px 12px',
-              fontSize: 12,
-              fontWeight: 800,
-              cursor: looksValid ? 'pointer' : 'not-allowed',
-              opacity: saving ? 0.6 : 1
-            }}
+            className="btn btn-primary"
+            style={{ fontSize: 12, padding: '8px 12px', opacity: saving ? 0.6 : 1 }}
           >
             {saving ? 'Saving...' : hasKey ? 'Update' : 'Save'}
             {!saving && <Check size={12} />}
@@ -272,17 +235,15 @@ export default function DedicatedInferencePage() {
       <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
 
       {/* Header */}
-      <div style={{ height: 60, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)' }}>
-        <button onClick={() => navigate(-1)} style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          ‹
-        </button>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>Dedicated Inference</div>
+      <div className="settings-header">
+        <button onClick={() => navigate(-1)} className="settings-back" aria-label="Go back">‹</button>
+        <div className="settings-header-title">Dedicated Inference</div>
       </div>
 
       {/* Content */}
-      <div style={{ padding: 16, maxWidth: 600, margin: '0 auto' }}>
+      <div className="settings-container">
         <div style={{ marginBottom: 20 }}>
-          <div style={{ color: '#cbd5e1', fontSize: 14, fontWeight: 800, letterSpacing: 0.4, padding: '0 4px', marginBottom: 16 }}>
+          <div className="settings-section-title">
             API Keys
           </div>
           <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 20 }}>

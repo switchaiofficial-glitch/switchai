@@ -117,15 +117,13 @@ export default function StatusPage() {
       <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
 
       {/* Header */}
-      <div style={{ height: 60, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)' }}>
-        <button onClick={() => navigate(-1)} style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          ‹
-        </button>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>Infrastructure Status</div>
+      <div className="settings-header">
+        <button onClick={() => navigate(-1)} className="settings-back" aria-label="Go back">‹</button>
+        <div className="settings-header-title">Infrastructure Status</div>
       </div>
 
       {/* Content */}
-      <div style={{ padding: 16, maxWidth: 600, margin: '0 auto' }}>
+      <div className="settings-container">
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
             <div style={{ width: 32, height: 32, border: '3px solid rgba(6,182,212,0.3)', borderTop: '3px solid #06b6d4', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: 16 }} />
@@ -138,21 +136,7 @@ export default function StatusPage() {
             </div>
             <div style={{ color: '#ef4444', fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Connection Failed</div>
             <div style={{ color: '#94a3b8', fontSize: 14, marginBottom: 20 }}>{error}</div>
-            <button
-              onClick={fetchServerStatus}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                background: '#06b6d4',
-                border: 'none',
-                color: '#0b0f14',
-                borderRadius: 12,
-                padding: '12px 16px',
-                fontWeight: 800,
-                cursor: 'pointer'
-              }}
-            >
+            <button onClick={fetchServerStatus} className="btn btn-primary">
               <RefreshCw size={18} />
               Retry Connection
             </button>
@@ -161,16 +145,10 @@ export default function StatusPage() {
           <>
             {/* AI Server Status */}
             <div style={{ marginBottom: 20 }}>
-              <div style={{ color: '#cbd5e1', fontSize: 14, fontWeight: 800, letterSpacing: 0.4, padding: '0 4px', marginBottom: 16 }}>Services</div>
+              <div className="settings-section-title">Services</div>
 
               {serverStatus && (
-                <div style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: 12,
-                  padding: '12px 16px',
-                  marginBottom: 16
-                }}>
+                <div className="settings-card" style={{ padding: '12px 16px', marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div style={{
@@ -214,12 +192,7 @@ export default function StatusPage() {
               )}
 
               {ocrServerStatus && (
-                <div style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: 12,
-                  padding: '12px 16px'
-                }}>
+                <div className="settings-card" style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div style={{
@@ -265,23 +238,7 @@ export default function StatusPage() {
 
             {/* Refresh Button */}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <button
-                onClick={fetchServerStatus}
-                disabled={loading}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  background: '#06b6d4',
-                  border: 'none',
-                  color: '#0b0f14',
-                  borderRadius: 12,
-                  padding: '12px 16px',
-                  fontWeight: 800,
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.6 : 1
-                }}
-              >
+              <button onClick={fetchServerStatus} disabled={loading} className="btn btn-primary" style={{ opacity: loading ? 0.6 : 1 }}>
                 <RefreshCw size={18} />
                 {loading ? 'Refreshing...' : 'Refresh Status'}
               </button>

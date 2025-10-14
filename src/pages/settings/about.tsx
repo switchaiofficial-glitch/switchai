@@ -14,15 +14,13 @@ export default function AboutPage() {
       <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
 
       {/* Header */}
-      <div style={{ height: 60, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)' }}>
-        <button onClick={() => navigate(-1)} style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          ‹
-        </button>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>About</div>
+      <div className="settings-header">
+        <button onClick={() => navigate(-1)} className="settings-back" aria-label="Go back">‹</button>
+        <div className="settings-header-title">About</div>
       </div>
 
       {/* Content */}
-      <div style={{ padding: 16, maxWidth: 600, margin: '0 auto' }}>
+      <div className="settings-container">
         {/* Hero Section */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 32 }}>
           <div style={{
@@ -53,13 +51,7 @@ export default function AboutPage() {
         </div>
 
         {/* Details Card */}
-        <div style={{
-          background: 'rgba(11, 15, 20, 0.7)',
-          border: `1px solid ${theme.colors.border}`,
-          borderRadius: 16,
-          padding: 20,
-          marginBottom: 20
-        }}>
+        <div className="settings-card" style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ color: '#94a3b8', fontSize: 12 }}>App</span>
             <span style={{ color: '#e5e7eb', fontWeight: 700 }}>SwitchAI</span>
@@ -139,40 +131,16 @@ export default function AboutPage() {
           <div style={{ display: 'flex', gap: 12 }}>
             <button
               onClick={() => window.open('https://github.com/your-repo', '_blank')}
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                background: 'rgba(59,130,246,0.08)',
-                border: '1px solid rgba(59,130,246,0.3)',
-                color: '#93c5fd',
-                borderRadius: 12,
-                padding: '12px 16px',
-                fontWeight: 800,
-                cursor: 'pointer'
-              }}
+              className="btn btn-outline"
+              style={{ flex: 1 }}
             >
               <Github size={18} />
               GitHub
             </button>
             <button
               onClick={() => window.open('https://your-website.com', '_blank')}
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                background: 'rgba(59,130,246,0.08)',
-                border: '1px solid rgba(59,130,246,0.3)',
-                color: '#93c5fd',
-                borderRadius: 12,
-                padding: '12px 16px',
-                fontWeight: 800,
-                cursor: 'pointer'
-              }}
+              className="btn btn-outline"
+              style={{ flex: 1 }}
             >
               <Globe size={18} />
               Website

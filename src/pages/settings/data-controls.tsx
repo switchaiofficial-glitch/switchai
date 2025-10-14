@@ -80,32 +80,20 @@ export default function DataControlsPage() {
       <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
 
       {/* Header */}
-      <div style={{ height: 60, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)' }}>
-        <button onClick={() => navigate(-1)} style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          ‹
-        </button>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>Data & Privacy</div>
+      <div className="settings-header">
+        <button onClick={() => navigate(-1)} className="settings-back" aria-label="Go back">‹</button>
+        <div className="settings-header-title">Data & Privacy</div>
       </div>
 
       {/* Content */}
-      <div style={{ padding: 16, maxWidth: 600, margin: '0 auto' }}>
+      <div className="settings-container">
         {/* Privacy Section */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ color: '#cbd5e1', fontSize: 14, fontWeight: 800, letterSpacing: 0.4, padding: '0 4px', marginBottom: 16 }}>Privacy</div>
-
-          <label style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'rgba(255,255,255,0.04)',
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: 12,
-            padding: '10px 12px',
-            cursor: 'pointer'
-          }}>
+        <div className="settings-section">
+          <div className="settings-section-title">Privacy</div>
+          <label className="settings-row settings-card" style={{ cursor: 'pointer' }}>
             <div>
-              <div style={{ color: '#e5e7eb', fontWeight: 700 }}>Use data for training</div>
-              <div style={{ color: '#94a3b8', fontSize: 12 }}>Allow anonymous usage to improve model quality</div>
+              <div className="settings-title">Use data for training</div>
+              <div className="settings-subtitle">Allow anonymous usage to improve model quality</div>
             </div>
             <input
               type="checkbox"
@@ -117,50 +105,17 @@ export default function DataControlsPage() {
         </div>
 
         {/* Danger Zone */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ color: '#cbd5e1', fontSize: 14, fontWeight: 800, letterSpacing: 0.4, padding: '0 4px', marginBottom: 16 }}>Danger zone</div>
-
-          <div style={{ background: 'rgba(253, 164, 175, 0.08)', borderRadius: 16, border: '1px solid rgba(253, 164, 175, 0.24)', padding: 16 }}>
-            <button
-              onClick={confirmDeleteActive}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                width: '100%',
-                background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.3)',
-                color: '#ef4444',
-                borderRadius: 12,
-                padding: '12px 16px',
-                fontWeight: 800,
-                cursor: 'pointer',
-                marginBottom: 10
-              }}
-            >
+        <div className="settings-section">
+          <div className="settings-section-title">Danger zone</div>
+          <div className="settings-card" style={{ padding: 16 }}>
+            <button onClick={confirmDeleteActive} className="btn btn-danger" style={{ width: '100%', justifyContent: 'flex-start', marginBottom: 10 }}>
               <Trash2 size={18} />
               <div style={{ flex: 1, textAlign: 'left' }}>
                 <div>Delete Active Chats</div>
                 <div style={{ fontSize: 12, fontWeight: 400, marginTop: 2 }}>Removes all active chats. Archived are kept.</div>
               </div>
             </button>
-
-            <button
-              onClick={confirmDeleteArchived}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                width: '100%',
-                background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.3)',
-                color: '#ef4444',
-                borderRadius: 12,
-                padding: '12px 16px',
-                fontWeight: 800,
-                cursor: 'pointer'
-              }}
-            >
+            <button onClick={confirmDeleteArchived} className="btn btn-danger" style={{ width: '100%', justifyContent: 'flex-start' }}>
               <Archive size={18} />
               <div style={{ flex: 1, textAlign: 'left' }}>
                 <div>Delete Archived Chats</div>
