@@ -1,11 +1,13 @@
 import { auth, firestore } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import Lottie from 'lottie-react';
-import { Archive, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Lightbulb, Lightbulb as LightbulbIcon, MoreHorizontal, Paperclip, Pencil, Plus, School, Settings, Share2, Square, Star, Trash2, Wand2, X } from 'lucide-react';
+import { Archive, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Copy, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Lightbulb, Lightbulb as LightbulbIcon, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, School, Settings, Share2, Square, Star, Trash2, Wand2, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from '../components/Markdown';
 import { cerebrasStreamCompletion } from '../lib/cerebrasClient';
+import { googleStreamCompletion } from '../lib/googleClient';
+import { mistralStreamCompletion } from '../lib/mistralClient';
 import type { AttachmentData, Chat, Message } from '../lib/chatStorage';
 import {
   addMessage,
@@ -724,7 +726,7 @@ export default function HomeScreen() {
   // Determine routing based on Firestore 'inference' only. Default is Groq.
   const provider = getProviderName(selectedModel); // for display only
   const rawPref = (selectedEntry?.inference || '').toString().toLowerCase();
-  const inferencePref = rawPref === 'openrouter' || rawPref === 'cerebras' || rawPref === 'groq' ? rawPref : 'groq';
+  const inferencePref = rawPref === 'openrouter' || rawPref === 'cerebras' || rawPref === 'groq' || rawPref === 'mistral' || rawPref === 'google' ? rawPref : 'groq';
 
       if (inferencePref === 'groq') {
         // Stream via Groq (Note: Groq doesn't support reasoning parameter)
@@ -759,6 +761,36 @@ export default function HomeScreen() {
       } else if (inferencePref === 'cerebras') {
         // Stream via Cerebras API directly
         await cerebrasStreamCompletion({
+          model: selectedModel,
+          messages: apiMessages,
+          onDelta: (delta) => {
+            fullResponse += delta;
+            throttledUpdate(fullResponse);
+          },
+          onDone: (text) => {
+            fullResponse = text;
+            setStreamingText(text);
+          },
+          signal: abortControllerRef.current.signal,
+        });
+      } else if (inferencePref === 'mistral') {
+        // Stream via Mistral API directly
+        await mistralStreamCompletion({
+          model: selectedModel,
+          messages: apiMessages,
+          onDelta: (delta) => {
+            fullResponse += delta;
+            throttledUpdate(fullResponse);
+          },
+          onDone: (text) => {
+            fullResponse = text;
+            setStreamingText(text);
+          },
+          signal: abortControllerRef.current.signal,
+        });
+      } else if (inferencePref === 'google') {
+        // Stream via Google Gemini API (via proxy)
+        await googleStreamCompletion({
           model: selectedModel,
           messages: apiMessages,
           onDelta: (delta) => {
@@ -925,6 +957,9 @@ export default function HomeScreen() {
 
   const closeChatMenu = () => setMenuOpenChatId(null);
 
+  // Message hover state for action buttons
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+
   // Close open chat menu on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpenChatId(null); };
@@ -1039,6 +1074,290 @@ export default function HomeScreen() {
     setInput('');
   };
 
+  // Edit user message
+  const handleEditMessage = (messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message || message.role !== 'user') return;
+    
+    // Set input to message content
+    const content = typeof message.content === 'string' ? message.content : '';
+    setInput(content);
+    
+    // Remove all messages from this point forward
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex !== -1) {
+      const newMessages = messages.slice(0, messageIndex);
+      setMessages(newMessages);
+      
+      // Update chat storage
+      if (currentChatId) {
+        const chat = getChat(currentChatId);
+        if (chat) {
+          updateChat(currentChatId, { messages: newMessages });
+        }
+      }
+    }
+    
+    // Focus input
+    inputRef.current?.focus();
+  };
+
+  // Regenerate assistant response
+  const handleRegenerateResponse = async (messageId: string) => {
+    if (sending) return; // Prevent if already sending
+    
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+    
+    // Find the user message that prompted this response
+    let userMessageIndex = messageIndex - 1;
+    while (userMessageIndex >= 0 && messages[userMessageIndex].role !== 'user') {
+      userMessageIndex--;
+    }
+    
+    if (userMessageIndex < 0) return;
+    
+    const userMessage = messages[userMessageIndex];
+    
+    // Remove the assistant message and everything after it (keep user message)
+    const newMessages = messages.slice(0, messageIndex);
+    setMessages(newMessages);
+    
+    // Update chat storage
+    if (currentChatId) {
+      const chat = getChat(currentChatId);
+      if (chat) {
+        updateChat(currentChatId, { messages: newMessages });
+      }
+    }
+    
+    // Directly trigger streaming with existing messages (don't add duplicate user message)
+    setSending(true);
+    setStreamingText('');
+    
+    const selectedEntry = models.find((m) => m.id === selectedModel);
+    if (!selectedEntry) {
+      setSending(false);
+      return;
+    }
+    
+    try {
+      // Stream response directly without adding a new user message
+      await streamResponse(newMessages, selectedEntry);
+    } catch (error) {
+      console.error('Regenerate failed:', error);
+      setSending(false);
+    }
+  };
+
+  // Helper function to send message with specific content
+  const sendMessageWithContent = async (content: string, attachments: AttachmentData[] = []) => {
+    if (!content.trim() && attachments.length === 0) return;
+    if (!selectedModel) return;
+
+    const selectedEntry = models.find((m) => m.id === selectedModel);
+    if (!selectedEntry) return;
+
+    // Build message content
+    let messageContent: string | any[] = content;
+    if (attachments.length > 0) {
+      const contentParts: any[] = [{ type: 'text', text: content }];
+      attachments.forEach((att) => {
+        if (att.type === 'image') {
+          contentParts.push({
+            type: 'image_url',
+            image_url: { url: att.dataUrl },
+          });
+        } else if (att.type === 'pdf') {
+          contentParts.push({
+            type: 'text',
+            text: `[PDF: ${att.name}]\n${att.text || ''}`,
+          });
+        }
+      });
+      messageContent = contentParts;
+    }
+
+    const userMessage: Message = {
+      id: `msg_${Date.now()}_user`,
+      role: 'user',
+      content: messageContent,
+      timestamp: Date.now(),
+      attachments: attachments.length > 0 ? attachments : undefined,
+    };
+
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+
+    if (currentChatId) {
+      await addMessage(currentChatId, userMessage);
+    }
+
+    // Clear input and attachments
+    setInput('');
+    setAttachedImages([]);
+    setAttachedPDFs([]);
+
+    // Stream response (reuse existing streaming logic)
+    await streamResponse(updatedMessages, selectedEntry);
+  };
+
+  // Extract streaming logic into separate function
+  const streamResponse = async (messageHistory: Message[], selectedEntry: any) => {
+    const abortControllerRef = { current: new AbortController() };
+    let flushTimer: any = null;
+    const streamBufferRef = { current: '' };
+    const lastUpdateRef = { current: Date.now() };
+
+    try {
+      const apiMessagesForApi = messageHistory.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const compressedMessages = compressAssistantHistory(apiMessagesForApi);
+      let sysMsg = null;
+      if (compressedMessages.length > 0 && compressedMessages[0].role === 'system') {
+        sysMsg = compressedMessages.shift();
+      }
+      const apiMessages = sysMsg ? [sysMsg, ...compressedMessages] : compressedMessages;
+
+      let fullResponse = '';
+      streamBufferRef.current = '';
+      lastUpdateRef.current = Date.now();
+
+      const throttledUpdate = (text: string) => {
+        streamBufferRef.current = text;
+        const now = Date.now();
+        if (now - lastUpdateRef.current >= 50) {
+          setStreamingText(text);
+          lastUpdateRef.current = now;
+        }
+      };
+
+      flushTimer = setInterval(() => {
+        if (streamBufferRef.current && Date.now() - lastUpdateRef.current >= 100) {
+          setStreamingText(streamBufferRef.current);
+          lastUpdateRef.current = Date.now();
+        }
+      }, 120);
+
+      const rawPref = (selectedEntry?.inference || '').toString().toLowerCase();
+      const inferencePref = rawPref === 'openrouter' || rawPref === 'cerebras' || rawPref === 'groq' || rawPref === 'mistral' || rawPref === 'google' ? rawPref : 'groq';
+
+      if (inferencePref === 'groq') {
+        await streamChatCompletion({
+          model: selectedModel,
+          messages: apiMessages,
+          onDelta: (delta) => {
+            fullResponse += delta;
+            throttledUpdate(fullResponse);
+          },
+          onDone: (text) => {
+            fullResponse = text;
+            setStreamingText(text);
+          },
+          signal: abortControllerRef.current.signal,
+        });
+      } else if (inferencePref === 'openrouter') {
+        await openRouterStreamCompletion({
+          model: selectedModel,
+          messages: apiMessages,
+          onDelta: (delta) => {
+            fullResponse += delta;
+            throttledUpdate(fullResponse);
+          },
+          onDone: (text) => {
+            fullResponse = text;
+            setStreamingText(text);
+          },
+          signal: abortControllerRef.current.signal,
+        });
+      } else if (inferencePref === 'cerebras') {
+        await cerebrasStreamCompletion({
+          model: selectedModel,
+          messages: apiMessages,
+          onDelta: (delta) => {
+            fullResponse += delta;
+            throttledUpdate(fullResponse);
+          },
+          onDone: (text) => {
+            fullResponse = text;
+            setStreamingText(text);
+          },
+          signal: abortControllerRef.current.signal,
+        });
+      } else if (inferencePref === 'mistral') {
+        await mistralStreamCompletion({
+          model: selectedModel,
+          messages: apiMessages,
+          onDelta: (delta) => {
+            fullResponse += delta;
+            throttledUpdate(fullResponse);
+          },
+          onDone: (text) => {
+            fullResponse = text;
+            setStreamingText(text);
+          },
+          signal: abortControllerRef.current.signal,
+        });
+      } else if (inferencePref === 'google') {
+        await googleStreamCompletion({
+          model: selectedModel,
+          messages: apiMessages,
+          onDelta: (delta) => {
+            fullResponse += delta;
+            throttledUpdate(fullResponse);
+          },
+          onDone: (text) => {
+            fullResponse = text;
+            setStreamingText(text);
+          },
+          signal: abortControllerRef.current.signal,
+        });
+      } else {
+        await streamChatCompletion({
+          model: selectedModel,
+          messages: apiMessages,
+          onDelta: (delta) => {
+            fullResponse += delta;
+            throttledUpdate(fullResponse);
+          },
+          onDone: (text) => {
+            fullResponse = text;
+            setStreamingText(text);
+          },
+          signal: abortControllerRef.current.signal,
+        });
+      }
+
+      const assistantMessage: Message = {
+        id: `msg_${Date.now()}_assistant`,
+        role: 'assistant',
+        content: fullResponse,
+        timestamp: Date.now(),
+        model: selectedModel,
+      };
+
+      const finalMessages = [...messageHistory, assistantMessage];
+      setMessages(finalMessages);
+      setStreamingText('');
+
+      if (currentChatId) {
+        await addMessage(currentChatId, assistantMessage);
+      }
+    } catch (error: any) {
+      console.error('Streaming error:', error);
+      setStreamingText('');
+      if (error?.message && !error.message.includes('aborted')) {
+        alert(`Error: ${error.message}`);
+      }
+    } finally {
+      if (flushTimer) clearInterval(flushTimer);
+      setSending(false);
+    }
+  };
+
   // Animation functions for smooth expand/collapse
   const expandPrompts = () => {
     if (isAnimating) return;
@@ -1082,7 +1401,7 @@ export default function HomeScreen() {
       maxWidth: '100vw',
       background: theme.colors.background,
       color: theme.colors.text,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      fontFamily: 'SUSE, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       overflow: 'hidden',
       overscrollBehavior: 'none',
       position: 'relative',
@@ -1549,29 +1868,40 @@ export default function HomeScreen() {
             </div>
           ) : (
             <>
-              {messages.map((msg) => (
+              {messages.map((msg, msgIndex) => {
+                const isLastAssistantMessage = msg.role === 'assistant' && msgIndex === messages.length - 1;
+                const showActions = msg.role === 'user' ? hoveredMessageId === msg.id : isLastAssistantMessage;
+                
+                return (
                 <div
                   key={msg.id}
                   style={{
                     display: 'flex',
-                    justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                    flexDirection: 'column',
+                    alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
                     maxWidth: '900px', width: '100%', margin: '0 auto',
-                    gap: 10,
+                    gap: 6,
                     animation: 'sa-fade-in .18s ease',
+                    position: 'relative',
                   }}
+                  onMouseEnter={() => msg.role === 'user' && setHoveredMessageId(msg.id)}
+                  onMouseLeave={() => msg.role === 'user' && setHoveredMessageId(null)}
                 >
                   <div style={msg.role === 'user' ? {
                     background: 'rgba(255, 255, 255, 0.06)',
                     border: `1px solid ${theme.colors.border}`,
                     borderRadius: 16,
                     padding: '0px 16px',
-                    maxWidth: '80%'
+                    maxWidth: '80%',
+                    position: 'relative',
                   } : {
                     background: 'transparent',
                     border: 'none',
                     padding: 0,
+                    width: '100%',
                     maxWidth: '100%',
-                    color: theme.colors.text
+                    color: theme.colors.text,
+                    position: 'relative',
                   }}>
                     {/* Show attachments if present */}
                     {msg.attachments && msg.attachments.length > 0 && (
@@ -1641,8 +1971,119 @@ export default function HomeScreen() {
                     )}
                     {renderMessageContent(msg.content)}
                   </div>
+                  
+                  {/* Action buttons */}
+                  {showActions && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '4px',
+                      marginTop: '4px',
+                      alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                    }}>
+                      {msg.role === 'user' ? (
+                        <>
+                          {/* Copy button for user messages - icon only */}
+                          <button
+                            onClick={() => handleCopyMessage(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}
+                            title="Copy"
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'rgba(255,255,255,0.5)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'color 0.15s',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
+                          >
+                            <Copy size={14} />
+                          </button>
+                          {/* Edit button for user messages - icon only */}
+                          <button
+                            onClick={() => handleEditMessage(msg.id)}
+                            title="Edit"
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'rgba(255,255,255,0.5)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'color 0.15s',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {/* Copy button for assistant messages - with background */}
+                          <button
+                            onClick={() => handleCopyMessage(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}
+                            title="Copy"
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              background: 'rgba(255,255,255,0.06)',
+                              border: `1px solid ${theme.colors.border}`,
+                              color: theme.colors.text,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              fontSize: '13px',
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                          >
+                            <Copy size={14} />
+                            <span>Copy</span>
+                          </button>
+                          {/* Regenerate button for assistant messages - with background */}
+                          <button
+                            onClick={() => handleRegenerateResponse(msg.id)}
+                            title="Regenerate"
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              background: 'rgba(255,255,255,0.06)',
+                              border: `1px solid ${theme.colors.border}`,
+                              color: theme.colors.text,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              fontSize: '13px',
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                          >
+                            <RefreshCw size={14} />
+                            <span>Regenerate</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ))}
+              );
+              })}
               {streamingText && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '900px', width: '100%', margin: '0 auto', gap: 10 }}>
                   <div style={{ background: 'transparent', border: 'none', padding: 0, maxWidth: '100%', color: theme.colors.text }}>
@@ -1815,10 +2256,11 @@ export default function HomeScreen() {
 
           <div style={{ maxWidth: '900px', margin: '0 auto', pointerEvents: 'auto' }}>
             <div style={{ 
-              background: theme.colors.surface,
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: '20px',
-              padding: '14px',
+              background: 'rgba(15, 15, 15, 0.95)',
+              border: `1.5px solid rgba(255,255,255,0.12)`,
+              borderRadius: '24px',
+              padding: '16px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
             }}>
               {/* Attachments preview area */}
               {(attachedImages.length > 0 || attachedPDFs.length > 0) && (
@@ -1947,7 +2389,7 @@ export default function HomeScreen() {
                   placeholder="Ask Anything..." disabled={sending}
                   style={{
                     width: '100%', minHeight: '52px', maxHeight: '160px', padding: '12px 14px',
-                    background: 'transparent', border: 'none', color: '#fff', fontSize: '16px', fontFamily: 'inherit', resize: 'none', outline: 'none',
+                    background: 'transparent', border: 'none', color: '#fff', fontSize: '16px', fontFamily: 'SUSE, sans-serif', resize: 'none', outline: 'none',
                   }}
                 />
               </div>
@@ -1978,15 +2420,16 @@ export default function HomeScreen() {
                     style={{
                       width: '40px', 
                       height: '40px', 
-                      background: 'rgba(255,255,255,0.06)', 
-                      border: `1px solid ${theme.colors.border}`,
-                      borderRadius: '10px', 
+                      background: 'rgba(255,255,255,0.08)', 
+                      border: `1.5px solid rgba(255,255,255,0.12)`,
+                      borderRadius: '12px', 
                       color: theme.colors.text, 
                       cursor: 'pointer', 
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
                       position: 'relative',
+                      transition: 'all 0.2s ease',
                     }}
                   >
                     <Paperclip size={18} />
@@ -2023,11 +2466,12 @@ export default function HomeScreen() {
                         bottom: '48px',
                         left: 0,
                         minWidth: '240px',
-                        background: theme.colors.surfaceAlt,
-                        border: `1px solid ${theme.colors.border}`,
-                        borderRadius: '16px',
-                        padding: '10px',
+                        background: 'rgba(15, 15, 15, 0.98)',
+                        border: `1.5px solid rgba(255,255,255,0.15)`,
+                        borderRadius: '18px',
+                        padding: '12px',
                         zIndex: 1500,
+                        boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)',
                       }}>
                         <div style={{
                           padding: '6px 8px 10px',
@@ -2123,8 +2567,9 @@ export default function HomeScreen() {
                 <div style={{ position: 'relative' }}>
                   <button onClick={() => setShowModelPicker(!showModelPicker)} style={{
                     display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px',
-                    background: 'rgba(255, 255, 255, 0.06)', border: `1px solid ${theme.colors.border}`,
-                    borderRadius: '12px', color: '#fff', fontSize: '14px', cursor: 'pointer', maxWidth: '260px',
+                    background: 'rgba(255, 255, 255, 0.08)', border: `1.5px solid rgba(255,255,255,0.12)`,
+                    borderRadius: '14px', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', maxWidth: '260px',
+                    transition: 'all 0.2s ease',
                   }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {selectedModelObj?.label || 'Select Model'}
@@ -2135,7 +2580,7 @@ export default function HomeScreen() {
                   {showModelPicker && (
                     <>
                       <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowModelPicker(false)} />
-                      <div style={{ position: 'absolute', bottom: '48px', left: 0, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: theme.colors.surfaceAlt, border: `1px solid ${theme.colors.border}`, borderRadius: '16px', padding: '12px', zIndex: 1500 }}>
+                      <div style={{ position: 'absolute', bottom: '48px', left: 0, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: 'rgba(15, 15, 15, 0.98)', border: `1.5px solid rgba(255,255,255,0.15)`, borderRadius: '20px', padding: '14px', zIndex: 1500, boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)' }}>
                         <div style={{ padding: '12px 8px 12px', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: '12px' }}>
                           <div style={{ fontSize: '18px', fontWeight: '700', color: theme.colors.text, marginBottom: '6px', letterSpacing: '-0.02em' }}>Choose Model</div>
                           <div style={{ fontSize: '13px', color: theme.colors.textSecondary }}>{models.length} models available</div>
@@ -2156,6 +2601,7 @@ export default function HomeScreen() {
                               mistral: { bg: 'rgba(139, 92, 246, 0.15)', text: '#a78bfa' },
                               cerebras: { bg: 'rgba(236, 72, 153, 0.15)', text: '#f472b6' },
                               openrouter: { bg: 'rgba(59, 130, 246, 0.15)', text: '#60a5fa' },
+                              google: { bg: 'rgba(34, 197, 94, 0.15)', text: '#4ade80' },
                             };
                             const inferenceStyle = inferenceColors[inferenceName.toLowerCase()] || inferenceColors.groq;
                             const isFav = favoritesSet.has(model.id);
@@ -2202,6 +2648,8 @@ export default function HomeScreen() {
                           const favoritesSorted = models.filter(m => favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
                           const groqSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'groq' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
                           const cerebrasSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'cerebras' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                          const mistralSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'mistral' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                          const googleSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'google' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
                           const openrouterSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'openrouter' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
 
                           return (
@@ -2209,6 +2657,8 @@ export default function HomeScreen() {
                               <Section title="Favorites" items={favoritesSorted} />
                               <Section title="Groq" items={groqSorted} />
                               <Section title="Cerebras" items={cerebrasSorted} />
+                              <Section title="Mistral" items={mistralSorted} />
+                              <Section title="Google" items={googleSorted} />
                               <Section title="OpenRouter" items={openrouterSorted} />
                             </>
                           );
@@ -2261,34 +2711,39 @@ export default function HomeScreen() {
                     ><Square size={18} strokeWidth={3} /></button>
                   ) : (
                     <button onClick={handleSend} disabled={!input.trim()} style={{
-                      minWidth: '75px',
-                      height: '35px',
-                      paddingLeft: '18px',
-                      paddingRight: '18px',
-                      background: 'transparent',
-                      border: `1px solid ${input.trim() ? theme.colors.primary : theme.colors.border}`,
-                      borderRadius: '22px',
-                      color: input.trim() ? theme.colors.primary : theme.colors.textSecondary,
+                      minWidth: '42px',
+                      height: '42px',
+                      paddingLeft: '0',
+                      paddingRight: '0',
+                      background: input.trim() ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255,255,255,0.06)',
+                      border: `1.5px solid ${input.trim() ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                      borderRadius: '50%',
+                      color: input.trim() ? '#ffffff' : theme.colors.textSecondary,
                       cursor: input.trim() ? 'pointer' : 'not-allowed',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: '15px',
                       fontWeight: '700',
-                      marginTop: '2px',
-                      opacity: input.trim() ? 1 : 0.6,
+                      marginTop: '0',
+                      opacity: input.trim() ? 1 : 0.5,
                       fontFamily: 'SUSE, sans-serif',
-                      transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease',
+                      transition: 'all 0.2s ease',
+                      boxShadow: input.trim() ? '0 4px 16px rgba(16, 185, 129, 0.3)' : 'none',
                     }}
                     onMouseEnter={(e) => {
                       if (input.trim()) {
-                        e.currentTarget.style.background = 'rgba(16,185,129,0.08)';
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
+                      if (input.trim()) {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.3)';
+                      }
                     }}
-                  ><ArrowUp size={18} strokeWidth={3} /></button>
+                  ><ArrowUp size={20} strokeWidth={3} /></button>
                   )}
                 </div>
               </div>

@@ -39,7 +39,7 @@ export default function App() {
       <div style={{
         position: 'fixed',
         inset: 0,
-        background: '#ffffff',
+        background: '#000000',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -75,14 +75,14 @@ export default function App() {
             <h1 style={{
               fontSize: '28px',
               fontWeight: '700',
-              color: '#000000',
+              color: '#ffffff',
               margin: '0 0 4px 0',
             }}>
               SwitchAi
             </h1>
             <p style={{
               fontSize: '16px',
-              color: '#666666',
+              color: '#94a3b8',
               margin: 0,
             }}>
               Initializing your experience...
@@ -98,21 +98,21 @@ export default function App() {
             <div style={{
               width: '8px',
               height: '8px',
-              background: '#cccccc',
+              background: '#10b981',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out infinite both',
             }} />
             <div style={{
               width: '8px',
               height: '8px',
-              background: '#cccccc',
+              background: '#10b981',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out 0.2s infinite both',
             }} />
             <div style={{
               width: '8px',
               height: '8px',
-              background: '#cccccc',
+              background: '#10b981',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out 0.4s infinite both',
             }} />

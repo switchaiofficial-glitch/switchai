@@ -18,7 +18,7 @@ export interface CatalogEntry {
   type: ModelType;
   provider?: string;
   capabilities?: string[];
-  inference?: 'groq' | 'openrouter' | 'cerebras' | 'mistral' | string;
+  inference?: 'groq' | 'openrouter' | 'cerebras' | 'mistral' | 'google' | string;
   hasReasoning?: boolean;
   supportsVision?: boolean;
 }
@@ -65,22 +65,16 @@ function detectReasoningSupport(modelId: string, data: FirestoreModel): boolean 
 }
 
 // Auto-detect inference provider from model ID if not explicitly set
-function detectInferenceProvider(modelId: string, explicitInference?: string): 'groq' | 'openrouter' | 'cerebras' | 'mistral' | 'groq' {
+function detectInferenceProvider(modelId: string, explicitInference?: string): 'groq' | 'openrouter' | 'cerebras' | 'mistral' | 'google' | 'groq' {
   // Priority 1: If explicit inference is set, use it
   if (explicitInference) {
     const inf = String(explicitInference).toLowerCase();
-    if (inf === 'openrouter' || inf === 'cerebras' || inf === 'groq' || inf === 'mistral') {
-      return inf as 'groq' | 'openrouter' | 'cerebras' | 'mistral';
+    if (inf === 'openrouter' || inf === 'cerebras' || inf === 'groq' || inf === 'mistral' || inf === 'google') {
+      return inf as 'groq' | 'openrouter' | 'cerebras' | 'mistral' | 'google';
     }
   }
   
-  // Priority 2: If no explicit inference field exists, default to 'groq'
-  // (This matches the requirement: if no field in firebase, it's groq)
-  if (explicitInference === undefined || explicitInference === null || explicitInference === '') {
-    return 'groq';
-  }
-  
-  // Priority 3: Fallback auto-detection (rarely used now)
+  // Priority 2: Auto-detect based on model ID patterns (before defaulting to Groq)
   const id = String(modelId || '').toLowerCase();
   
   // Cerebras models
@@ -88,17 +82,32 @@ function detectInferenceProvider(modelId: string, explicitInference?: string): '
     return 'cerebras';
   }
   
-  // Mistral models
+  // Mistral models (native Mistral API)
   if (id.includes('mistral') && !id.includes('mixtral')) {
     return 'mistral';
   }
   
-  // OpenRouter exclusive models (only for explicit cases)
-  if (id.includes('gpt-4') || id.includes('claude') || id.includes('o1-')) {
+  // Google/Gemini models (native Google API via proxy)
+  // These use Google's Gemini API directly, not OpenRouter
+  if (id.includes('gemini')) {
+    return 'google';
+  }
+  
+  // OpenRouter exclusive models - models that ONLY work on OpenRouter
+  if (
+    id.includes('gpt-4') || 
+    id.includes('gpt-3.5') ||
+    id.includes('claude') || 
+    id.includes('o1-') ||
+    id.includes('gemma-2') ||
+    id.includes('deepseek') ||
+    id.includes('qwen') ||
+    id.includes('moonshot')
+  ) {
     return 'openrouter';
   }
   
-  // Final fallback to Groq
+  // Priority 3: If no explicit inference field exists and no pattern matched, default to 'groq'
   return 'groq';
 }
 
@@ -189,7 +198,7 @@ export function getProviderName(modelId: string): string {
   if (id.includes('qwen') || id.includes('alibaba')) return 'Qwen';
   if (id.includes('meta') || id.includes('llama')) return 'Meta';
   if (id.includes('groq')) return 'Groq';
-  if (id.includes('mistral') || id.includes('pixtral')) return 'Mistral';
+  if (id.includes('mistral') || id.includes('pixtral') || id.includes('mixtral')) return 'Mistral';
   if (id.includes('cerebras')) return 'Cerebras';
   if (id.includes('claude') || id.includes('anthropic')) return 'Anthropic';
   

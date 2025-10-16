@@ -4,12 +4,12 @@ import { useNavigate } from 'react-router-dom';
 
 export default function LoginHome() {
   const navigate = useNavigate();
-  const [switchAiAnim, setSwitchAiAnim] = React.useState<any>(null);
+  const [appAnim, setAppAnim] = React.useState<any>(null);
   const [getStartedAnim, setGetStartedAnim] = React.useState<any>(null);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
 
   React.useEffect(() => {
-    fetch('/animations/switchai.json').then(r => r.json()).then(setSwitchAiAnim).catch(() => {});
+    fetch('/animations/app.json').then(r => r.json()).then(setAppAnim).catch(() => {});
     fetch('/animations/getstarted.json').then(r => r.json()).then(setGetStartedAnim).catch(() => {});
   }, []);
 
@@ -33,9 +33,9 @@ export default function LoginHome() {
       <div className="login-home-main">
         {/* Logo Section */}
         <div className="login-home-logo-section">
-          {switchAiAnim && (
+          {appAnim && (
             <Lottie
-              animationData={switchAiAnim}
+              animationData={appAnim}
               loop
               className="login-home-logo-lottie"
             />

@@ -1,6 +1,6 @@
 import katex from 'katex';
-import { Check, Clipboard } from 'lucide-react';
-import { useState } from 'react';
+import { Brain, Check, ChevronDown, ChevronUp, Clipboard } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -63,6 +63,9 @@ const getPrettyLanguageName = (lang: string): string => {
 
 export default function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [reasoningOpen, setReasoningOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
   // Settings from localStorage (managed in Settings page)
   let mathLatexEnabled = true;
   let katexOnlyEnabled = false;
@@ -72,6 +75,71 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
     if (m != null) mathLatexEnabled = m === '1';
     if (k != null) katexOnlyEnabled = k === '1';
   } catch {}
+
+  // Post-render cleanup: remove any spacing artifacts from the DOM
+  useEffect(() => {
+    if (!containerRef.current || (!mathLatexEnabled && !katexOnlyEnabled)) return;
+
+    const cleanupTimeout = setTimeout(() => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      // Pattern to match spacing commands
+      const spacingPattern = /\/\s*\[[\d.]+[a-zA-Z]+\]|\[[\d.]+(?:pt|em|cm|mm|in|ex)\]/;
+
+      // Find all text nodes containing spacing patterns
+      const walker = document.createTreeWalker(
+        container,
+        NodeFilter.SHOW_TEXT,
+        null
+      );
+
+      const nodesToClean: Text[] = [];
+      let node: Node | null;
+      
+      while ((node = walker.nextNode())) {
+        if (node.textContent && spacingPattern.test(node.textContent)) {
+          nodesToClean.push(node as Text);
+        }
+      }
+
+      // Clean or remove the nodes
+      nodesToClean.forEach(textNode => {
+        if (textNode.textContent) {
+          const cleaned = textNode.textContent
+            .replace(/\/\s*\[[\d.]+[a-zA-Z]+\]/g, '')
+            .replace(/\[[\d.]+(?:pt|em|cm|mm|in|ex)\]/g, '')
+            .trim();
+          
+          if (cleaned) {
+            textNode.textContent = cleaned;
+          } else {
+            textNode.remove();
+          }
+        }
+      });
+
+      // Remove any .katex-error elements containing spacing patterns
+      const errors = container.querySelectorAll('.katex-error');
+      errors.forEach(error => {
+        const text = error.textContent || '';
+        if (spacingPattern.test(text) || text.length < 10) {
+          error.remove();
+        }
+      });
+
+      // Remove any standalone error spans that only contain brackets/spacing
+      const spans = container.querySelectorAll('span');
+      spans.forEach(span => {
+        const text = (span.textContent || '').trim();
+        if (spacingPattern.test(text) && text.length < 15) {
+          span.remove();
+        }
+      });
+    }, 150); // Slightly longer delay to ensure complete rendering
+
+    return () => clearTimeout(cleanupTimeout);
+  }, [content, mathLatexEnabled, katexOnlyEnabled]);
 
   const handleCopyCode = async (code: string, lang: string) => {
     try {
@@ -85,36 +153,98 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
 
   // Preprocess content
   // 1) Convert <think>/<reason>/<reasoning> blocks to fenced code with language 'reasoning'
-  //    so our renderer shows them as collapsible sections.
+  //    Handle both full tags and closing-only tags (</think>)
   // 2) Normalize LaTeX delimiters for remark-math.
   const baseProcessed = content
+    // Handle full tags: <think>...</think>
     .replace(/<\s*(think|reason|reasoning)\s*>[\s\n]*([\s\S]*?)[\s\n]*<\s*\/\s*(think|reason|reasoning)\s*>/gi, (_m, _o1, inner) => {
       const cleaned = String(inner).trim();
-      // Wrap into fenced code block labeled as reasoning
       return `\n\n\`\`\`reasoning\n${cleaned}\n\`\`\`\n\n`;
+    })
+    // Handle closing-only tags: </think> (treat everything before it as reasoning)
+    .replace(/^([\s\S]*?)<\s*\/\s*(think|reason|reasoning)\s*>/i, (_m, inner) => {
+      const cleaned = String(inner).trim();
+      if (cleaned) {
+        return `\n\n\`\`\`reasoning\n${cleaned}\n\`\`\`\n\n`;
+      }
+      return '';
     })
   let processedContent = baseProcessed;
   if (mathLatexEnabled || katexOnlyEnabled) {
+    // Helper function to aggressively clean LaTeX spacing commands
+    const cleanLatexSpacing = (text: string) => {
+      return text
+        // All variations of spacing commands
+        .replace(/\\\\\s*\[[^\]]+\]/g, ' ')
+        .replace(/\\\s*\[[\d.]+[a-zA-Z]+\]/g, ' ')
+        .replace(/\/\s*\[[\d.]+[a-zA-Z]+\]/g, ' ')
+        .replace(/\[[\d.]+pt\]/g, ' ')
+        .replace(/\[[\d.]+em\]/g, ' ')
+        .replace(/\[[\d.]+cm\]/g, ' ')
+        // Standalone backslash-backslash
+        .replace(/\\\\\s*$/gm, '')
+        .replace(/\\\\\s+/g, ' ');
+    };
+
     processedContent = baseProcessed
+      // Pre-clean the entire content
+      .replace(/\\\\\s*\[[^\]]+\]/g, ' ')
+      .replace(/\/\[[\d.]+[a-zA-Z]+\]/g, ' ')
       // Convert \[...\] to $$...$$ for display math
-      .replace(/\\\[([\s\S]*?)\\\]/g, (_: any, math: string) => `$$${math}$$`)
-      // Convert \\(...\\) to $...$ for inline math
-      .replace(/\\\(([\s\S]*?)\\\)/g, (_: any, math: string) => `$${math}$`);
+      .replace(/\\\[([\s\S]{2,}?)\\\]/g, (_: any, math: string) => {
+        return `$$${cleanLatexSpacing(math).trim()}$$`;
+      })
+      // Convert \(...\) to $...$ for inline math
+      .replace(/\\\(([\s\S]{1,}?)\\\)/g, (_: any, math: string) => {
+        return `$${cleanLatexSpacing(math).trim()}$`;
+      })
+      // Clean ALL existing $$...$$ blocks (multiple passes)
+      .replace(/\$\$([\s\S]+?)\$\$/g, (_: any, math: string) => {
+        return `$$${cleanLatexSpacing(math).trim()}$$`;
+      })
+      .replace(/\$\$([\s\S]+?)\$\$/g, (_: any, math: string) => {
+        return `$$${cleanLatexSpacing(math).trim()}$$`;
+      })
+      // Clean ALL existing $...$ inline blocks (multiple passes)
+      .replace(/\$([^\$\n]+?)\$/g, (_: any, math: string) => {
+        return `$${cleanLatexSpacing(math).trim()}$`;
+      })
+      .replace(/\$([^\$\n]+?)\$/g, (_: any, math: string) => {
+        return `$${cleanLatexSpacing(math).trim()}$`;
+      })
+      // Final aggressive global cleanup
+      .replace(/\\\\\s*\[[^\]]+\]/g, '')
+      .replace(/\/\[[\d.]+[a-zA-Z]+\]/g, '')
+      .replace(/\[[\d.]+pt\]/g, '')
+      .replace(/\[[\d.]+em\]/g, '');
   }
 
   return (
-    <div className={`markdown-content ${className}`} style={{ 
-      fontSize: '15px', 
-      lineHeight: '1.7',
-      color: theme.colors.text,
-    }}>
+    <div 
+      ref={containerRef}
+      className={`markdown-content ${className}`} 
+      style={{ 
+        fontSize: '15px', 
+        lineHeight: '1.7',
+        color: theme.colors.text,
+        width: '100%',
+        maxWidth: '100%',
+      }}
+    >
       <ReactMarkdown
         remarkPlugins={[
           remarkGfm,
           ...(mathLatexEnabled || katexOnlyEnabled ? [remarkMath] as any : []),
         ]}
         rehypePlugins={(mathLatexEnabled || katexOnlyEnabled)
-          ? [[rehypeKatex as any, { strict: false, throwOnError: false, trust: true, fleqn: false }]]
+          ? [[rehypeKatex as any, { 
+              strict: false, 
+              throwOnError: false, 
+              trust: true, 
+              fleqn: false,
+              errorColor: '#94a3b8',
+              output: 'html'
+            }]]
           : []}
         components={{
           // Headings
@@ -388,9 +518,16 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             if (!inline && match && isMathFence && (mathLatexEnabled || katexOnlyEnabled)) {
               let html = '';
               try {
-                html = katex.renderToString(codeString, { displayMode: true, throwOnError: false });
+                html = katex.renderToString(codeString, { 
+                  displayMode: true, 
+                  throwOnError: false,
+                  errorColor: '#94a3b8',
+                  strict: false,
+                  trust: true,
+                  output: 'html'
+                });
               } catch (e) {
-                html = `<pre>${codeString.replace(/</g,'&lt;')}</pre>`;
+                html = `<pre style="color: #94a3b8;">${codeString.replace(/</g,'&lt;')}</pre>`;
               }
               return (
                 <div style={{ margin: '16px 0', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.03)' }}>
@@ -400,39 +537,59 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             }
 
             if (!inline && match && isReasoning) {
+              const reasoningContent = codeString.trim() || 'Nothing to think, Skipped Reasoning';
               return (
                 <div style={{
                   margin: '12px 0',
                   borderRadius: 12,
-                  border: `1px solid ${theme.colors.border}`,
-                  background: 'rgba(255,255,255,0.03)'
+                  border: `1.5px solid rgba(255,255,255,0.12)`,
+                  background: 'rgba(255,255,255,0.03)',
+                  overflow: 'hidden',
+                  width: '100%',
+                  maxWidth: '100%',
                 }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '10px 14px',
-                    borderBottom: `1px solid ${theme.colors.border}`,
-                    color: theme.colors.text,
-                    background: 'rgba(255,255,255,0.04)'
-                  }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 999, background: theme.colors.primary, display: 'inline-block' }} />
-                      <strong style={{ fontSize: 12, letterSpacing: 0.4 }}>Reasoning</strong>
-                    </span>
-                  </div>
-                  <div style={{ maxHeight: 480, overflow: 'auto' }}>
-                    <pre style={{
-                      margin: 0,
-                      padding: 16,
-                      overflowX: 'auto',
-                      fontSize: 14,
-                      lineHeight: 1.6,
-                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                  <button
+                    onClick={() => setReasoningOpen(!reasoningOpen)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      border: 'none',
+                      background: 'rgba(255,255,255,0.05)',
                       color: theme.colors.text,
-                      background: 'transparent'
-                    }}>
-                      {codeString}
-                    </pre>
-                  </div>
+                      cursor: 'pointer',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <Brain size={16} color={theme.colors.text} strokeWidth={2} />
+                      <strong style={{ fontSize: 13, letterSpacing: 0.3, fontWeight: '600' }}>Reasoning</strong>
+                    </span>
+                    {reasoningOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
+                  {reasoningOpen && (
+                    <div style={{ maxHeight: 480, overflowY: 'auto', overflowX: 'hidden' }}>
+                      <pre style={{
+                        margin: 0,
+                        padding: 16,
+                        fontSize: 14,
+                        lineHeight: 1.6,
+                        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                        color: theme.colors.text,
+                        background: 'transparent',
+                        whiteSpace: 'pre-wrap',
+                        wordWrap: 'break-word',
+                        overflowWrap: 'break-word',
+                        maxWidth: '100%',
+                      }}>
+                        {reasoningContent}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               );
             }

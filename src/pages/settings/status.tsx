@@ -39,8 +39,10 @@ interface ServerStatus {
 
 const getHealthStatus = (errorRate: string) => {
   const rate = parseFloat(errorRate);
-  if (isNaN(rate) || rate < 5) return { status: 'Operational', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
-  if (rate < 20) return { status: 'Degraded', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' };
+  if (isNaN(rate)) return { status: 'Unknown', color: '#94a3b8', bg: 'rgba(255,255,255,0.02)' };
+  if (rate < 5) return { status: 'Operational', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
+  if (rate < 30) return { status: 'Degraded', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' };
+  if (rate < 80) return { status: 'Critical', color: '#fb923c', bg: 'rgba(251, 146, 60, 0.1)' };
   return { status: 'Outage', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' };
 };
 
@@ -90,6 +92,8 @@ export default function StatusPage() {
       if (mainResponse.ok) {
         const mainData = await mainResponse.json();
         setServerStatus(mainData);
+      } else {
+        setServerStatus(null);
       }
 
       // Fetch OCR server status
@@ -97,6 +101,8 @@ export default function StatusPage() {
       if (ocrResponse.ok) {
         const ocrData = await ocrResponse.json();
         setOcrServerStatus(ocrData);
+      } else {
+        setOcrServerStatus(null);
       }
     } catch (err) {
       setError('Failed to connect to servers');
