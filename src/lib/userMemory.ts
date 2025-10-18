@@ -1,11 +1,9 @@
 /**
  * User Memory Service for Website
  * Embedding-based search through AI memory and chat history
- * Optimized for minimal token usage - uses local embeddings for retrieval
+ * Uses local embeddings only - NO API calls, NO tokens used!
  */
 
-import { doc, getDoc } from 'firebase/firestore';
-import OpenAI from 'openai';
 import { auth, firestore } from './firebase';
 
 // Types
@@ -15,7 +13,7 @@ export interface MemoryItem {
   text: string;
   type: MemoryType;
   key?: string | null;
-  embedding: number[]; // Primary vector (OpenAI or local)
+  embedding: number[]; // Local vector
   dim: number;
   qvec: number[]; // Fast 256-dim local vector for retrieval
   createdAt: number;
@@ -29,14 +27,11 @@ const STORAGE_KEY = 'userMemory:v1:items';
 const ENABLED_KEY = 'userMemory:v1:enabled';
 const MAX_RETRIEVE = 5;
 const DEFAULT_TOPN = 5;
-const OPENAI_EMBED_MODEL = 'text-embedding-3-small';
 const MAX_ITEMS = 800;
 
 // In-memory cache
 let cache: MemoryItem[] = [];
 let loaded = false;
-let openaiClient: OpenAI | null = null;
-let openaiKey: string | null = null;
 
 // Utils
 const now = () => Date.now();
@@ -119,64 +114,6 @@ export async function setMemoryEnabled(v: boolean): Promise<void> {
   await setEnabledFlag(v);
 }
 
-// OpenAI client (optional, for better embeddings)
-async function fetchOpenAIKey(): Promise<string> {
-  const uid = auth?.currentUser?.uid || null;
-  if (uid) {
-    try {
-      const userRef = doc(firestore, 'users', uid, 'api', 'openai');
-      const snap = await getDoc(userRef);
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        if (data?.enabled && typeof data.key === 'string' && data.key) {
-          return data.key;
-        }
-      }
-    } catch {}
-  }
-  
-  const globalRef = doc(firestore, 'api', 'openai');
-  const gSnap = await getDoc(globalRef);
-  if (!gSnap.exists()) throw new Error('OpenAI key not configured');
-  const g = gSnap.data() as any;
-  if (!g?.key) throw new Error('OpenAI key missing');
-  return String(g.key);
-}
-
-async function getOpenAI(): Promise<OpenAI | null> {
-  try {
-    if (openaiClient && openaiKey) return openaiClient;
-    const key = await fetchOpenAIKey();
-    openaiKey = key;
-    openaiClient = new OpenAI({ apiKey: key, dangerouslyAllowBrowser: true });
-    return openaiClient;
-  } catch {
-    return null;
-  }
-}
-
-async function embedRemote(text: string): Promise<number[] | null> {
-  try {
-    const client = await getOpenAI();
-    if (!client) return null;
-    const res = await client.embeddings.create({
-      model: OPENAI_EMBED_MODEL,
-      input: text,
-    });
-    const vec = res?.data?.[0]?.embedding as number[] | undefined;
-    if (Array.isArray(vec) && vec.length) return normalize(vec.slice());
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-async function getEmbedding(text: string): Promise<{ vector: number[]; dim: number; origin: 'openai' | 'local' }> {
-  const remote = await embedRemote(text);
-  if (remote) return { vector: remote, dim: remote.length, origin: 'openai' };
-  const local = localEmbedding(text);
-  return { vector: local, dim: local.length, origin: 'local' };
-}
 
 // Cache load/save
 async function loadCache(): Promise<void> {
