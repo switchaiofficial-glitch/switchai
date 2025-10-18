@@ -1,7 +1,6 @@
 import { auth } from '@/lib/firebase';
 import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import './styles/animations.css';
 import HomeScreen from './pages/HomeScreen';
 import LoginHome from './pages/LoginHome';
 import SettingsPage from './pages/Settings';
@@ -13,6 +12,7 @@ import DedicatedInferencePage from './pages/settings/dedicated-inference';
 import PersonalizationPage from './pages/settings/personalization';
 import StatusPage from './pages/settings/status';
 import TokensPage from './pages/settings/tokens';
+import './styles/animations.css';
 
 export default function App() {
   const [user, setUser] = React.useState<any | null>(auth.currentUser);
@@ -87,6 +87,7 @@ export default function App() {
                 height: '80px',
                 objectFit: 'contain',
                 animation: 'glow 2s ease-in-out infinite',
+                borderRadius: '20',
               }}
             />
           </div>
