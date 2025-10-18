@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { theme } from '../theme';
@@ -237,16 +238,44 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
           ...(mathLatexEnabled || katexOnlyEnabled ? [remarkMath] as any : []),
         ]}
         rehypePlugins={(mathLatexEnabled || katexOnlyEnabled)
-          ? [[rehypeKatex as any, { 
-              strict: false, 
-              throwOnError: false, 
-              trust: true, 
-              fleqn: false,
-              errorColor: '#94a3b8',
-              output: 'html'
-            }]]
-          : []}
+          ? [
+              rehypeRaw as any,
+              [rehypeKatex as any, { 
+                strict: false, 
+                throwOnError: false, 
+                trust: true, 
+                fleqn: false,
+                errorColor: '#94a3b8',
+                output: 'html',
+                macros: {
+                  "\\RR": "\\mathbb{R}",
+                  "\\NN": "\\mathbb{N}",
+                  "\\ZZ": "\\mathbb{Z}",
+                  "\\QQ": "\\mathbb{Q}",
+                  "\\CC": "\\mathbb{C}"
+                }
+              }]
+            ]
+          : [rehypeRaw as any]}
         components={{
+          // Math elements - ensure proper HTML rendering
+          span: ({ node, className, children, ...props }: any) => {
+            // Check if this is a KaTeX span
+            if (className && (className.includes('katex') || className.includes('math'))) {
+              // Return as-is to preserve KaTeX HTML structure
+              return <span className={className} {...props}>{children}</span>;
+            }
+            return <span {...props}>{children}</span>;
+          },
+          div: ({ node, className, children, ...props }: any) => {
+            // Check if this is a KaTeX display math div
+            if (className && (className.includes('katex') || className.includes('math'))) {
+              // Return as-is to preserve KaTeX HTML structure
+              return <div className={className} {...props}>{children}</div>;
+            }
+            return <div {...props}>{children}</div>;
+          },
+          
           // Headings
           h1: ({ children }) => (
             <h1 style={{ 

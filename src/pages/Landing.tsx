@@ -14,7 +14,7 @@ export default function Landing() {
       <header className="landing-header">
         <div className="landing-header-content">
           <div className="landing-logo">
-            <img src="/logo.png" alt="SwitchAi" className="landing-logo-img" />
+            <img src="/app.png" alt="SwitchAi" className="landing-logo-img" />
             <strong className="landing-logo-text">SwitchAi</strong>
           </div>
           <nav className="landing-nav">

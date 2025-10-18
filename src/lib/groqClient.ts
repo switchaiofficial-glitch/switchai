@@ -1,5 +1,9 @@
 import { doc, getDoc } from 'firebase/firestore';
+import { handleAPIError, logError, parseErrorResponse, validateMessages } from './errorHandler';
 import { auth, db as firestore } from './firebase';
+import { estimateTokensFromText, incrementModelUsage } from './modelUsageLogger';
+import responseCache from './responseCacheService';
+import { consumeTokens } from './tokenService';
 
 interface StreamOptions {
   model: string;
@@ -69,12 +73,35 @@ export async function streamChatCompletion({
   onDelta,
   onDone
 }: StreamOptions): Promise<string> {
+  const startTime = Date.now();
+
+  // Validate messages
+  const validation = validateMessages(messages);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  // Check cache first for instant responses
+  const cachedResponse = responseCache.get(messages, model);
+  if (cachedResponse) {
+    console.log('[Groq] Using cached response - INSTANT!');
+    if (onDelta) {
+      const words = cachedResponse.split(' ');
+      for (const word of words) {
+        onDelta(word + ' ');
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    }
+    if (onDone) onDone(cachedResponse);
+    return cachedResponse;
+  }
+
   const apiKey = await fetchGroqApiKey();
   
   const controller = new AbortController();
   const abortSignal = signal || controller.signal;
   
-  // Build request body - only include reasoning if it's explicitly provided and not undefined/null
+  // Build request body
   const requestBody: any = {
     model,
     messages,
@@ -83,7 +110,6 @@ export async function streamChatCompletion({
     stream: true,
   };
   
-  // Only add reasoning parameter if it's actually defined and not undefined/null
   if (reasoning !== undefined && reasoning !== null) {
     requestBody.reasoning = reasoning;
   }
@@ -100,8 +126,9 @@ export async function streamChatCompletion({
   });
   
   if (!res.ok || !res.body) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Streaming request failed: ${res.status} ${res.statusText} ${text}`);
+    const apiError = await parseErrorResponse(res, 'Groq');
+    logError(apiError, 'streamChatCompletion');
+    throw apiError;
   }
   
   const reader = res.body.getReader();
@@ -142,6 +169,37 @@ export async function streamChatCompletion({
   } finally {
     reader.releaseLock();
   }
+  
+  // Cache the response
+  if (fullText && fullText.length > 10) {
+    const estimated = estimateTokensFromText(fullText);
+    responseCache.set(messages, model, fullText, estimated);
+    
+    // Log usage and consume tokens
+    try {
+      if (estimated > 0) {
+        await incrementModelUsage({
+          provider: 'groq',
+          model,
+          completionTokens: estimated,
+          totalTokens: estimated,
+          userId: auth?.currentUser?.uid,
+        });
+        
+        // Consume tokens from balance
+        await consumeTokens(estimated, `AI request to ${model}`, {
+          provider: 'groq',
+          model,
+          completionTokens: estimated,
+        }).catch(() => {});
+      }
+    } catch (error) {
+      console.error('[Groq] Error logging usage:', error);
+    }
+  }
+  
+  const latency = Date.now() - startTime;
+  console.log(`[Groq] Stream completed in ${latency}ms`);
   
   if (onDone) onDone(fullText);
   return fullText;

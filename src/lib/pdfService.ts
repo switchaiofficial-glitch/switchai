@@ -8,7 +8,7 @@ interface PDFExtractionResult {
 }
 
 export class PDFService {
-  private static readonly API_URL = 'https://vivektools.onrender.com/api/ocr';
+  private static readonly API_URL = 'https://ocr.collegebuzz.in/api/ocr';
 
   /**
    * Extract text from a PDF file using the vivektools OCR API

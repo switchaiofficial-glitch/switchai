@@ -88,7 +88,7 @@ export default function StatusPage() {
     setError(null);
     try {
       // Fetch AI server status
-      const mainResponse = await fetch('https://switchai.onrender.com/api/status');
+      const mainResponse = await fetch('https://ai.collegebuzz.in/api/status');
       if (mainResponse.ok) {
         const mainData = await mainResponse.json();
         setServerStatus(mainData);
@@ -97,7 +97,7 @@ export default function StatusPage() {
       }
 
       // Fetch OCR server status
-      const ocrResponse = await fetch('https://vivektools.onrender.com/api/status');
+      const ocrResponse = await fetch('https://ocr.collegebuzz.in/api/status');
       if (ocrResponse.ok) {
         const ocrData = await ocrResponse.json();
         setOcrServerStatus(ocrData);

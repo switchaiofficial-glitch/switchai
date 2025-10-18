@@ -1,7 +1,8 @@
 import { auth, firestore } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import Lottie from 'lottie-react';
-import { Archive, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Copy, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Lightbulb, Lightbulb as LightbulbIcon, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, School, Settings, Share2, Square, Star, Trash2, Wand2, X } from 'lucide-react';
+import { Archive, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Copy, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Lightbulb, Lightbulb as LightbulbIcon, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, School, Settings, Share2, Smartphone, Square, Star, Trash2, Wand2, X, Zap } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from '../components/Markdown';
@@ -25,6 +26,11 @@ import { buildCatalog, getProviderName } from '../lib/modelCatalog';
 import { openRouterStreamCompletion } from '../lib/openRouterClient';
 import { PDFService } from '../lib/pdfService';
 import { theme } from '../theme';
+import { autoSwitchModel, detectQueryIntent, isAutoSwitchEnabled, setAutoSwitchEnabled, type ModelEntry } from '../lib/autoModelSwitch';
+import { buildMemorySystemPrompt, initMemoryDocument, maybeStoreFromUserMessage } from '../lib/aiMemoryService';
+import { createDateTimeSystemMessage, isDateTimeQuery } from '../lib/dateTimeContext';
+import { maybeInjectUserNameContext } from '../lib/userNameContext';
+import rateLimiter, { retryWithBackoff } from '../lib/requestRateLimiter';
 
 interface AttachedImage {
   dataUrl: string;
@@ -228,6 +234,12 @@ export default function HomeScreen() {
   const [showAllPrompts, setShowAllPrompts] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   
+  // Auto-switch state
+  const [autoSwitch, setAutoSwitch] = useState<boolean>(() => isAutoSwitchEnabled());
+  
+  // Mobile app QR modal state
+  const [showMobileModal, setShowMobileModal] = useState(false);
+  
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -293,6 +305,11 @@ export default function HomeScreen() {
   // Load models from Firestore
   useEffect(() => {
     loadModels();
+  }, []);
+
+  // Initialize AI Memory
+  useEffect(() => {
+    initMemoryDocument().catch(console.error);
   }, []);
 
   // Persist reasoning level
@@ -515,11 +532,53 @@ export default function HomeScreen() {
   const handleSend = async () => {
     if ((!input.trim() && !attachedImages.length && !attachedPDFs.length) || sending) return;
 
+    // Check rate limit
+    const rateLimitCheck = await rateLimiter.checkLimit('chat');
+    if (!rateLimitCheck.allowed) {
+      alert(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
+      return;
+    }
+
     const userText = input.trim();
     const localImages = [...attachedImages];
     const localPDFs = [...attachedPDFs];
     const hasImages = localImages.length > 0;
     const hasPDFs = localPDFs.length > 0;
+
+    // Auto-switch model if enabled
+    try {
+      const modelEntries: ModelEntry[] = models.map(m => ({
+        id: m.id,
+        label: m.label || m.id,
+        type: m.type || 'text',
+        hasReasoning: m.hasReasoning,
+        inference: m.inference as any,
+        supportsVision: m.supportsVision,
+      }));
+      
+      const switchedModel = autoSwitchModel(
+        userText,
+        modelEntries,
+        hasImages,
+        messages.length,
+        selectedModel
+      );
+      
+      if (switchedModel) {
+        console.log(`🔄 Auto-switched to: ${switchedModel}`);
+        setSelectedModel(switchedModel);
+        localStorage.setItem('selectedModel', switchedModel);
+      }
+    } catch (error) {
+      console.error('Auto-switch error:', error);
+    }
+
+    // Store user message in AI memory
+    try {
+      await maybeStoreFromUserMessage(userText);
+    } catch (error) {
+      console.error('AI memory error:', error);
+    }
 
     // Prepare attachments data for display
     const attachmentsData: AttachmentData[] = [
@@ -699,7 +758,32 @@ export default function HomeScreen() {
         content: apiUserContent, // Use API content with OCR text
       }];
       
-      const apiMessages = sysMsg ? [sysMsg, ...apiMessagesForApi] : apiMessagesForApi;
+      // Inject AI Memory context if enabled
+      const systemMessages: any[] = [];
+      if (sysMsg) systemMessages.push(sysMsg);
+      
+      try {
+        const memoryPrompt = await buildMemorySystemPrompt();
+        if (memoryPrompt) {
+          systemMessages.push({ role: 'system', content: memoryPrompt });
+        }
+      } catch (error) {
+        console.error('Memory injection error:', error);
+      }
+      
+      // Inject date/time context if query is about date/time
+      if (isDateTimeQuery(userText)) {
+        const dateTimeMsg = createDateTimeSystemMessage();
+        systemMessages.push(dateTimeMsg);
+      }
+      
+      // Inject user name context if query is about their name
+      const userNameMsg = maybeInjectUserNameContext(userText);
+      if (userNameMsg) {
+        systemMessages.push(userNameMsg);
+      }
+      
+      const apiMessages = systemMessages.length > 0 ? [...systemMessages, ...apiMessagesForApi] : apiMessagesForApi;
 
       let fullResponse = '';
       streamBufferRef.current = '';
@@ -729,20 +813,22 @@ export default function HomeScreen() {
   const inferencePref = rawPref === 'openrouter' || rawPref === 'cerebras' || rawPref === 'groq' || rawPref === 'mistral' || rawPref === 'google' ? rawPref : 'groq';
 
       if (inferencePref === 'groq') {
-        // Stream via Groq (Note: Groq doesn't support reasoning parameter)
-        await streamChatCompletion({
-          model: selectedModel,
-          messages: apiMessages,
-          onDelta: (delta) => {
-            fullResponse += delta;
-            throttledUpdate(fullResponse);
-          },
-          onDone: (text) => {
-            fullResponse = text;
-            setStreamingText(text);
-          },
-          signal: abortControllerRef.current.signal,
-        });
+        // Stream via Groq with retry logic
+        await retryWithBackoff(async () => {
+          await streamChatCompletion({
+            model: selectedModel,
+            messages: apiMessages,
+            onDelta: (delta) => {
+              fullResponse += delta;
+              throttledUpdate(fullResponse);
+            },
+            onDone: (text) => {
+              fullResponse = text;
+              setStreamingText(text);
+            },
+            signal: abortControllerRef.current?.signal,
+          });
+        }, 3, 1000);
   } else if (inferencePref === 'openrouter') {
         // Stream via OpenRouter
         await openRouterStreamCompletion({
@@ -1210,15 +1296,15 @@ export default function HomeScreen() {
     const lastUpdateRef = { current: Date.now() };
 
     try {
-      const apiMessagesForApi = messageHistory.map((m) => ({
+      const compressedMessages = compressAssistantHistory(messageHistory);
+      const apiMessagesForApi = compressedMessages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      const compressedMessages = compressAssistantHistory(apiMessagesForApi);
       let sysMsg = null;
-      if (compressedMessages.length > 0 && compressedMessages[0].role === 'system') {
-        sysMsg = compressedMessages.shift();
+      if (apiMessagesForApi.length > 0 && (apiMessagesForApi[0] as any).role === 'system') {
+        sysMsg = apiMessagesForApi.shift();
       }
       const apiMessages = sysMsg ? [sysMsg, ...compressedMessages] : compressedMessages;
 
@@ -1668,9 +1754,8 @@ export default function HomeScreen() {
 
         {/* Account Section */}
         <div style={{ padding: '14px', borderTop: `1px solid ${theme.colors.border}` }}>
-          <div onClick={() => navigate('/settings')} style={{
-            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', borderRadius: '12px', cursor: 'pointer',
-            transition: 'background 0.2s ease',
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', borderRadius: '12px',
           }}>
             <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: `1px solid ${theme.colors.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)' }}>
               {user?.photoURL && !avatarError ? (
@@ -1694,7 +1779,64 @@ export default function HomeScreen() {
                 {user?.email || 'Not signed in'}
               </div>
             </div>
-            <Settings size={18} color={theme.colors.textMuted} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMobileModal(true);
+                }}
+                title="Download Mobile App"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: theme.colors.textMuted,
+                  transition: 'color 0.2s',
+                  borderRadius: '8px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = theme.colors.primary;
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = theme.colors.textMuted;
+                  e.currentTarget.style.background = 'none';
+                }}
+              >
+                <Smartphone size={18} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/settings');
+                }}
+                title="Settings"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: theme.colors.textMuted,
+                  transition: 'color 0.2s',
+                  borderRadius: '8px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = theme.colors.primary;
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = theme.colors.textMuted;
+                  e.currentTarget.style.background = 'none';
+                }}
+              >
+                <Settings size={18} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -2668,6 +2810,33 @@ export default function HomeScreen() {
                   )}
                 </div>
 
+                {/* Auto-switch toggle */}
+                <button 
+                  onClick={() => {
+                    const newValue = !autoSwitch;
+                    setAutoSwitch(newValue);
+                    setAutoSwitchEnabled(newValue);
+                  }} 
+                  title={autoSwitch ? "Auto-switch: ON" : "Auto-switch: OFF"}
+                  style={{
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: 6, 
+                    padding: '10px 12px',
+                    background: autoSwitch ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255,255,255,0.06)', 
+                    border: `1px solid ${autoSwitch ? 'rgba(16, 185, 129, 0.3)' : theme.colors.border}`,
+                    borderRadius: '999px', 
+                    color: autoSwitch ? '#10b981' : '#94a3b8', 
+                    fontSize: 12, 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Zap size={14} strokeWidth={2.5} fill={autoSwitch ? '#10b981' : 'none'} />
+                  <span>Auto</span>
+                </button>
+
                 {isReasoningSelected && (
                   <div style={{ position: 'relative' }}>
                     <button onClick={() => setShowReasoningMenu(v => !v)} title="Reasoning level"
@@ -2796,6 +2965,172 @@ export default function HomeScreen() {
         ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
         ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
       `}</style>
+
+      {/* Mobile App QR Modal */}
+      {showMobileModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 3000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={() => setShowMobileModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: `linear-gradient(180deg, ${theme.gradients.background.join(', ')})`,
+              borderRadius: 24,
+              padding: 32,
+              maxWidth: 400,
+              width: '90%',
+              border: `1px solid ${theme.colors.border}`,
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+              position: 'relative',
+            }}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setShowMobileModal(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: '50%',
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: theme.colors.text,
+              }}
+            >
+              <X size={18} />
+            </button>
+
+            {/* Title */}
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: theme.colors.text, marginBottom: 8 }}>
+                Download Mobile App
+              </h2>
+              <p style={{ fontSize: 14, color: theme.colors.textSecondary }}>
+                Scan the QR code to download from Play Store
+              </p>
+            </div>
+
+            {/* QR Code Container */}
+            <div
+              style={{
+                background: 'white',
+                borderRadius: 16,
+                padding: 24,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 16,
+                marginBottom: 24,
+              }}
+            >
+              {/* QR Code with App Logo in Center */}
+              <div
+                style={{
+                  position: 'relative',
+                  width: 256,
+                  height: 256,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <QRCodeSVG
+                  value="https://play.google.com/store/apps/details?id=com.vivekgowdas.SwitchAi"
+                  size={256}
+                  level="H"
+                  includeMargin={false}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                  }}
+                />
+                {/* App Logo in Center */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 64,
+                    height: 64,
+                    background: 'white',
+                    borderRadius: 12,
+                    padding: 4,
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                  }}
+                >
+                  <img
+                    src="/app.png"
+                    alt="SwitchAi"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: 8,
+                      objectFit: 'contain',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Play Store Button */}
+            <a
+              href="https://play.google.com/store/apps/details?id=com.vivekgowdas.SwitchAi"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                padding: '14px 24px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                border: 'none',
+                borderRadius: 12,
+                color: 'white',
+                fontSize: 16,
+                fontWeight: 600,
+                cursor: 'pointer',
+                textDecoration: 'none',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                boxShadow: '0 4px 16px rgba(16, 185, 129, 0.3)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.02)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.3)';
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12L3.84 21.85C3.34 21.6 3 21.09 3 20.5Z" fill="currentColor"/>
+                <path d="M16.81 15.12L6.05 21.34L14.54 12.85L16.81 15.12Z" fill="currentColor"/>
+                <path d="M20.16 10.81C20.5 11.08 20.75 11.5 20.75 12C20.75 12.5 20.53 12.9 20.18 13.18L17.89 14.5L15.39 12L17.89 9.5L20.16 10.81Z" fill="currentColor"/>
+                <path d="M6.05 2.66L16.81 8.88L14.54 11.15L6.05 2.66Z" fill="currentColor"/>
+              </svg>
+              <span>Get it on Play Store</span>
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

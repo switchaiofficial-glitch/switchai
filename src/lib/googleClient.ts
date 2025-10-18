@@ -67,7 +67,7 @@ async function fetchGoogleKey(): Promise<string> {
 // Proxy server base URL
 function getProxyBase(): string {
   // Use production server for web
-  return 'https://switchai.onrender.com';
+  return 'https://ai.collegebuzz.in';
 }
 
 export async function googleStreamCompletion({

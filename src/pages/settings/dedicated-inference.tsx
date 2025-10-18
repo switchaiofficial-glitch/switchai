@@ -1,7 +1,7 @@
-import { Check, ExternalLink, Eye, EyeOff, Key } from 'lucide-react';
+import { Check, ExternalLink, Eye, EyeOff, Key, AlertCircle, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { theme } from '../../theme';
+import SettingsLayout from '../../components/SettingsLayout';
+import '../../styles/animations.css';
 
 interface ProviderCardProps {
   title: 'Groq' | 'OpenRouter' | 'Cerebras';
@@ -24,8 +24,9 @@ function ProviderCard({
   setEnabled,
   looksValid,
   docsUrl,
-  placeholder
-}: ProviderCardProps) {
+  placeholder,
+  index
+}: ProviderCardProps & { index?: number }) {
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -42,7 +43,6 @@ function ProviderCard({
 
     setSaving(true);
     try {
-      // Save to localStorage
       localStorage.setItem(`${title.toLowerCase()}_api_key`, trimmed);
       localStorage.setItem(`${title.toLowerCase()}_enabled`, 'true');
       setEnabled(true);
@@ -64,110 +64,239 @@ function ProviderCard({
   };
 
   return (
-    <div className="settings-card" style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div className="animate-fade-in-up" style={{ 
+      background: 'rgba(255, 255, 255, 0.04)',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      borderRadius: 12,
+      padding: 20,
+      marginBottom: 12,
+      transition: 'all 0.3s ease',
+      animationDelay: `${(index || 0) * 100}ms`,
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             borderRadius: 10,
             background: 'rgba(255,255,255,0.06)',
-            border: `1px solid ${theme.colors.border}`,
+            border: '1px solid rgba(255, 255, 255, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <Key size={16} />
+            <Key size={20} color="#ffffff" />
           </div>
           <div>
-            <div style={{ color: '#e5e7eb', fontWeight: 800 }}>{title}</div>
-            <div style={{ color: '#94a3b8', fontSize: 12 }}>Use your own {title} API key</div>
+            <div style={{ color: '#ffffff', fontWeight: 700, fontSize: 16, marginBottom: 2 }}>{title}</div>
+            <div style={{ color: '#666666', fontSize: 13 }}>Use your own {title} API key</div>
           </div>
         </div>
         <div style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: 8,
-          padding: '4px 10px',
+          padding: '6px 12px',
           borderRadius: 999,
-          background: enabled ? '#a5f3fc' : 'rgba(148,163,184,0.18)',
-          border: `1px solid ${enabled ? 'rgba(165,243,252,0.8)' : 'rgba(148,163,184,0.35)'}`
+          background: enabled ? '#10b981' : 'rgba(255, 255, 255, 0.04)',
+          border: `1px solid ${enabled ? '#10b981' : 'rgba(255, 255, 255, 0.08)'}`,
+          transition: 'all 0.2s ease',
         }}>
           <div style={{
             width: 8,
             height: 8,
             borderRadius: 999,
-            background: enabled ? '#0b0f14' : '#cbd5e1'
+            background: enabled ? '#000000' : '#666666'
           }} />
           <span style={{
-            color: enabled ? '#0b0f14' : '#cbd5e1',
-            fontWeight: 800,
+            color: enabled ? '#000000' : '#666666',
+            fontWeight: 700,
             fontSize: 11,
-            letterSpacing: 0.5
+            letterSpacing: '0.5px',
+            textTransform: 'uppercase',
           }}>
-            {enabled ? 'Enabled' : 'Disabled'}
+            {enabled ? 'Active' : 'Inactive'}
           </span>
         </div>
       </div>
 
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: 'block', color: '#888888', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          API Key
+        </label>
         <div style={{ position: 'relative' }}>
           <input
             type={showKey ? 'text' : 'password'}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={placeholder}
-            className="input"
-            style={{ paddingRight: 40, borderColor: looksValid ? undefined : 'rgba(239,68,68,0.5)' }}
+            style={{
+              width: '100%',
+              padding: '12px 44px 12px 16px',
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: `1px solid ${!value ? 'rgba(255, 255, 255, 0.08)' : looksValid ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'}`,
+              borderRadius: 10,
+              color: '#ffffff',
+              fontSize: 14,
+              fontFamily: 'monospace',
+              transition: 'all 0.2s ease',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+              e.currentTarget.style.borderColor = !value ? 'rgba(255, 255, 255, 0.08)' : looksValid ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+            }}
           />
           <button
             onClick={() => setShowKey(!showKey)}
             style={{
               position: 'absolute',
-              right: 8,
+              right: 12,
               top: '50%',
               transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              color: '#94a3b8',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 6,
+              color: '#888888',
               cursor: 'pointer',
-              padding: 4
+              padding: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.color = '#ffffff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+              e.currentTarget.style.color = '#888888';
             }}
           >
             {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
+        {value && !looksValid && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, color: '#ef4444', fontSize: 12 }}>
+            <AlertCircle size={14} />
+            <span>Invalid API key format</span>
+          </div>
+        )}
+        {value && looksValid && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, color: '#10b981', fontSize: 12 }}>
+            <Check size={14} />
+            <span>Valid API key format</span>
+          </div>
+        )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <label style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 10, 
+          cursor: 'pointer',
+          padding: '8px 12px',
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: 8,
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+        }}>
           <input
             type="checkbox"
             checked={enabled}
             onChange={(e) => onToggle(e.target.checked)}
-            style={{ width: 16, height: 16 }}
+            style={{ 
+              width: 18, 
+              height: 18,
+              cursor: 'pointer',
+            }}
           />
-          <span style={{ color: '#cbd5e1', fontSize: 12 }}>Enable {title}</span>
+          <span style={{ color: '#ffffff', fontSize: 13, fontWeight: 600 }}>Enable {title}</span>
         </label>
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={() => window.open(docsUrl, '_blank')}
-            className="btn btn-outline"
-            style={{ fontSize: 12, padding: '8px 12px' }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '10px 16px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 8,
+              color: '#ffffff',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
           >
-            <ExternalLink size={12} />
+            <ExternalLink size={14} />
             Docs
           </button>
 
           <button
             onClick={onSave}
             disabled={saving || !looksValid}
-            className="btn btn-primary"
-            style={{ fontSize: 12, padding: '8px 12px', opacity: saving ? 0.6 : 1 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '10px 16px',
+              background: (saving || !looksValid) ? 'rgba(16, 185, 129, 0.3)' : '#10b981',
+              border: 'none',
+              borderRadius: 8,
+              color: (saving || !looksValid) ? '#888888' : '#000000',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: (saving || !looksValid) ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              opacity: (saving || !looksValid) ? 0.5 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!saving && looksValid) {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
           >
-            {saving ? 'Saving...' : hasKey ? 'Update' : 'Save'}
-            {!saving && <Check size={12} />}
+            {saving ? 'Saving...' : hasKey ? 'Update Key' : 'Save Key'}
+            {!saving && <Check size={14} />}
           </button>
         </div>
       </div>
@@ -176,7 +305,6 @@ function ProviderCard({
 }
 
 export default function DedicatedInferencePage() {
-  const navigate = useNavigate();
 
   // Groq state
   const [groqKey, setGroqKey] = useState('');
@@ -228,65 +356,84 @@ export default function DedicatedInferencePage() {
   }, []);
 
   return (
-    <div style={{ minHeight: '100dvh', background: `linear-gradient(180deg, ${theme.gradients.background.join(', ')})`, color: theme.colors.text, position: 'relative' }}>
-      {/* Geometric elements for depth */}
-      <div style={{ position: 'absolute', width: 280, height: 280, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.06)', top: '-15%', right: '-15%' }} />
-      <div style={{ position: 'absolute', width: 180, height: 180, border: '1px solid rgba(255, 255, 255, 0.05)', transform: 'rotate(45deg)', bottom: '20%', left: '10%' }} />
-      <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
-
-      {/* Header */}
-      <div className="settings-header">
-        <button onClick={() => navigate(-1)} className="settings-back" aria-label="Go back">‹</button>
-        <div className="settings-header-title">Dedicated Inference</div>
-      </div>
-
-      {/* Content */}
-      <div className="settings-container">
-        <div style={{ marginBottom: 20 }}>
-          <div className="settings-section-title">
-            API Keys
+    <SettingsLayout title="Dedicated Inference" subtitle="Use your own API keys for inference">
+      {/* Info card */}
+      <div className="animate-fade-in-up" style={{
+        background: 'rgba(255, 255, 255, 0.04)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: 12,
+        padding: 20,
+        marginBottom: 24,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 16,
+      }}>
+        <div style={{
+          width: 44,
+          height: 44,
+          borderRadius: 10,
+          background: 'rgba(16, 185, 129, 0.1)',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <Sparkles size={20} color="#10b981" />
+        </div>
+        <div>
+          <div style={{ color: '#ffffff', fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Secure & Private</div>
+          <div style={{ color: '#888888', fontSize: 13, lineHeight: 1.6 }}>
+            Your API keys are stored locally in your browser and never sent to our servers. Enable dedicated inference to use your own keys for unlimited access.
           </div>
-          <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 20 }}>
-            Use your own API keys for dedicated inference. Keys are stored locally in your browser.
-          </div>
-
-          <ProviderCard
-            title="Groq"
-            value={groqKey}
-            setValue={setGroqKey}
-            enabled={groqEnabled}
-            hasKey={groqHasKey}
-            setEnabled={setGroqEnabled}
-            looksValid={groqLooksValid}
-            docsUrl="https://console.groq.com/keys"
-            placeholder="gsk_..."
-          />
-
-          <ProviderCard
-            title="OpenRouter"
-            value={orKey}
-            setValue={setOrKey}
-            enabled={orEnabled}
-            hasKey={orHasKey}
-            setEnabled={setOrEnabled}
-            looksValid={orLooksValid}
-            docsUrl="https://openrouter.ai/keys"
-            placeholder="sk-or-v1-..."
-          />
-
-          <ProviderCard
-            title="Cerebras"
-            value={cbKey}
-            setValue={setCbKey}
-            enabled={cbEnabled}
-            hasKey={cbHasKey}
-            setEnabled={setCbEnabled}
-            looksValid={cbLooksValid}
-            docsUrl="https://inference.cerebras.ai/"
-            placeholder="csk-..."
-          />
         </div>
       </div>
-    </div>
+
+      {/* Provider cards */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ color: '#ffffff', fontSize: 16, fontWeight: 700, marginBottom: 16, letterSpacing: '-0.3px' }}>
+          API Providers
+        </div>
+
+        <ProviderCard
+          index={0}
+          title="Groq"
+          value={groqKey}
+          setValue={setGroqKey}
+          enabled={groqEnabled}
+          hasKey={groqHasKey}
+          setEnabled={setGroqEnabled}
+          looksValid={groqLooksValid}
+          docsUrl="https://console.groq.com/keys"
+          placeholder="gsk_..."
+        />
+
+        <ProviderCard
+          index={1}
+          title="OpenRouter"
+          value={orKey}
+          setValue={setOrKey}
+          enabled={orEnabled}
+          hasKey={orHasKey}
+          setEnabled={setOrEnabled}
+          looksValid={orLooksValid}
+          docsUrl="https://openrouter.ai/keys"
+          placeholder="sk-or-v1-..."
+        />
+
+        <ProviderCard
+          index={2}
+          title="Cerebras"
+          value={cbKey}
+          setValue={setCbKey}
+          enabled={cbEnabled}
+          hasKey={cbHasKey}
+          setEnabled={setCbEnabled}
+          looksValid={cbLooksValid}
+          docsUrl="https://inference.cerebras.ai/"
+          placeholder="csk-..."
+        />
+      </div>
+    </SettingsLayout>
   );
 }

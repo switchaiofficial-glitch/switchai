@@ -4,6 +4,7 @@ export interface AttachmentData {
   type: 'image' | 'pdf';
   dataUrl?: string; // For images
   name?: string; // For PDFs
+  text?: string; // Extracted text from PDF
   file?: File; // Original file reference
 }
 
