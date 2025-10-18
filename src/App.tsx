@@ -87,7 +87,7 @@ export default function App() {
                 height: '80px',
                 objectFit: 'contain',
                 animation: 'glow 2s ease-in-out infinite',
-                borderRadius: '20',
+                borderRadius: '20px',
               }}
             />
           </div>
