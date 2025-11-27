@@ -27,25 +27,25 @@ export type WebTheme = {
 export const darkTheme: WebTheme = {
   mode: 'dark',
   colors: {
-    background: '#000000',
-    surface: 'rgba(10, 10, 10, 0.8)',
-    surfaceAlt: 'rgba(15, 15, 15, 0.95)',
-    text: '#ffffff',
-    textMuted: '#e5e7eb',
-    textSecondary: '#94a3b8',
-    border: 'rgba(255,255,255,0.1)',
-    borderLight: 'rgba(255,255,255,0.15)',
-    primary: '#10b981',
-    primaryMuted: 'rgba(16,185,129,0.25)',
+    background: '#212121',  // Main page: rgb(33, 33, 33)
+    surface: '#181818',     // Sidebar: rgb(24, 24, 24)
+    surfaceAlt: '#2a2a2a',  // Input/message area (slightly lighter)
+    text: '#ececec',        // Light text
+    textMuted: '#b4b4b4',
+    textSecondary: '#8e8e8e',
+    border: '#444444',      // Subtle border
+    borderLight: '#555555',
+    primary: '#19c37d',     // ChatGPT's green
+    primaryMuted: 'rgba(25,195,125,0.25)',
     accentBlue: '#3b82f6',
-    success: '#10b981',
+    success: '#19c37d',
     error: '#ef4444',
   },
   gradients: {
-    background: ['#000000', '#000000', '#0a0a0a'] as const,
-    messageUser: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.05)'] as const,
+    background: ['#212121', '#212121', '#212121'] as const,
+    messageUser: ['rgba(255,255,255,0.03)', 'rgba(255,255,255,0.02)'] as const,
     messageAssistant: ['transparent', 'transparent'] as const,
-    accent: ['#10b981', '#3b82f6'] as const,
+    accent: ['#19c37d', '#3b82f6'] as const,
   },
   radii: { md: 12, lg: 16, pill: 999 },
 };

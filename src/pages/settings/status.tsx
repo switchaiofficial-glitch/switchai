@@ -1,7 +1,7 @@
 import { Brain, FileText, RefreshCw, Server } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { theme } from '../../theme';
+import SettingsLayout from '../../components/SettingsLayout';
+import '../../styles/animations.css';
 
 interface ServerStatus {
   uptime: {
@@ -73,8 +73,6 @@ function Metric({ label, value, unit }: { label: string; value: string | number;
 }
 
 export default function StatusPage() {
-  const navigate = useNavigate();
-
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [ocrServerStatus, setOcrServerStatus] = useState<ServerStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -116,142 +114,185 @@ export default function StatusPage() {
   }, []);
 
   return (
-    <div style={{ minHeight: '100dvh', background: `linear-gradient(180deg, ${theme.gradients.background.join(', ')})`, color: theme.colors.text, position: 'relative' }}>
-      {/* Geometric elements for depth */}
-      <div style={{ position: 'absolute', width: 280, height: 280, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.06)', top: '-15%', right: '-15%' }} />
-      <div style={{ position: 'absolute', width: 180, height: 180, border: '1px solid rgba(255, 255, 255, 0.05)', transform: 'rotate(45deg)', bottom: '20%', left: '10%' }} />
-      <div style={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.04)', top: '60%', right: '10%' }} />
-
-      {/* Header */}
-      <div className="settings-header">
-        <button onClick={() => navigate(-1)} className="settings-back" aria-label="Go back">‹</button>
-        <div className="settings-header-title">Infrastructure Status</div>
-      </div>
-
-      {/* Content */}
-      <div className="settings-container">
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-            <div style={{ width: 32, height: 32, border: '3px solid rgba(6,182,212,0.3)', borderTop: '3px solid #06b6d4', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: 16 }} />
-            <div style={{ color: '#cbd5e1', fontSize: 16 }}>Loading infrastructure metrics...</div>
+    <SettingsLayout title="Infrastructure Status" subtitle="Monitor server health and performance">
+      {loading ? (
+        <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+          <div style={{ width: 32, height: 32, border: '3px solid rgba(6,182,212,0.3)', borderTop: '3px solid #06b6d4', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: 16 }} />
+          <div style={{ color: '#cbd5e1', fontSize: 16 }}>Loading infrastructure metrics...</div>
+        </div>
+      ) : error ? (
+        <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+          <div style={{ color: '#ef4444', marginBottom: 16 }}>
+            <Server size={48} />
           </div>
-        ) : error ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-            <div style={{ color: '#ef4444', marginBottom: 16 }}>
-              <Server size={48} />
-            </div>
-            <div style={{ color: '#ef4444', fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Connection Failed</div>
-            <div style={{ color: '#94a3b8', fontSize: 14, marginBottom: 20 }}>{error}</div>
-            <button onClick={fetchServerStatus} className="btn btn-primary">
+          <div style={{ color: '#ef4444', fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Connection Failed</div>
+          <div style={{ color: '#94a3b8', fontSize: 14, marginBottom: 20 }}>{error}</div>
+          <button onClick={fetchServerStatus} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '12px 20px',
+            background: '#10b981',
+            border: 'none',
+            borderRadius: 10,
+            color: '#000000',
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}>
+            <RefreshCw size={18} />
+            Retry Connection
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* AI Server Status */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ color: '#ffffff', fontSize: 16, fontWeight: 700, marginBottom: 16, letterSpacing: '-0.3px' }}>Services</div>
+
+            {serverStatus && (
+              <div className="animate-fade-in-up" style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 12,
+                padding: '16px',
+                marginBottom: 16,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: 'rgba(6,182,212,0.1)',
+                      border: '1px solid rgba(6,182,212,0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <Brain size={20} color="#06b6d4" />
+                    </div>
+                    <div>
+                      <div style={{ color: '#e5e7eb', fontWeight: 700 }}>AI Server</div>
+                      <div style={{ color: '#94a3b8', fontSize: 12 }}>SwitchAI backend infrastructure</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      background: aiHealth.color
+                    }} />
+                    <div style={{ color: aiHealth.color, fontWeight: 700, fontSize: 12 }}>{aiHealth.status}</div>
+                  </div>
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: 12
+                }}>
+                  <Metric label="UPTIME" value={serverStatus.uptime.formatted} />
+                  <Metric label="TOTAL" value={formatNumberSafe(serverStatus.requests.total)} />
+                  <Metric label="SUCCESS" value={serverStatus.requests.successRate} />
+                  <Metric label="LATENCY" value={formatNumberSafe(serverStatus.performance.avgResponseTime)} unit="ms" />
+                </div>
+              </div>
+            )}
+
+            {ocrServerStatus && (
+              <div className="animate-fade-in-up" style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 12,
+                padding: '16px',
+                animationDelay: '100ms',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: 'rgba(6,182,212,0.1)',
+                      border: '1px solid rgba(6,182,212,0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <FileText size={20} color="#06b6d4" />
+                    </div>
+                    <div>
+                      <div style={{ color: '#e5e7eb', fontWeight: 700 }}>OCR Server</div>
+                      <div style={{ color: '#94a3b8', fontSize: 12 }}>Document processing service</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      background: ocrHealth.color
+                    }} />
+                    <div style={{ color: ocrHealth.color, fontWeight: 700, fontSize: 12 }}>{ocrHealth.status}</div>
+                  </div>
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: 12
+                }}>
+                  <Metric label="UPTIME" value={ocrServerStatus.uptime.formatted} />
+                  <Metric label="PAGES" value={formatNumberSafe(ocrServerStatus.ocr?.totalPagesProcessed ?? 0)} />
+                  <Metric label="SUCCESS" value={ocrServerStatus.requests.successRate} />
+                  <Metric label="LATENCY" value={formatNumberSafe(ocrServerStatus.today.avgProcessingTime)} unit="ms" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Refresh Button */}
+          <div className="animate-fade-in-up" style={{ display: 'flex', justifyContent: 'center', animationDelay: '200ms' }}>
+            <button onClick={fetchServerStatus} disabled={loading} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '12px 20px',
+              background: '#10b981',
+              border: 'none',
+              borderRadius: 10,
+              color: '#000000',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
+              transition: 'all 0.2s ease',
+            }}
+              onMouseEnter={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}>
               <RefreshCw size={18} />
-              Retry Connection
+              {loading ? 'Refreshing...' : 'Refresh Status'}
             </button>
           </div>
-        ) : (
-          <>
-            {/* AI Server Status */}
-            <div style={{ marginBottom: 20 }}>
-              <div className="settings-section-title">Services</div>
-
-              {serverStatus && (
-                <div className="settings-card" style={{ padding: '12px 16px', marginBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 10,
-                        background: 'rgba(6,182,212,0.1)',
-                        border: '1px solid rgba(6,182,212,0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}>
-                        <Brain size={20} color="#06b6d4" />
-                      </div>
-                      <div>
-                        <div style={{ color: '#e5e7eb', fontWeight: 700 }}>AI Server</div>
-                        <div style={{ color: '#94a3b8', fontSize: 12 }}>SwitchAI backend infrastructure</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 999,
-                        background: aiHealth.color
-                      }} />
-                      <div style={{ color: aiHealth.color, fontWeight: 700, fontSize: 12 }}>{aiHealth.status}</div>
-                    </div>
-                  </div>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                    gap: 12
-                  }}>
-                    <Metric label="UPTIME" value={serverStatus.uptime.formatted} />
-                    <Metric label="TOTAL" value={formatNumberSafe(serverStatus.requests.total)} />
-                    <Metric label="SUCCESS" value={serverStatus.requests.successRate} />
-                    <Metric label="LATENCY" value={formatNumberSafe(serverStatus.performance.avgResponseTime)} unit="ms" />
-                  </div>
-                </div>
-              )}
-
-              {ocrServerStatus && (
-                <div className="settings-card" style={{ padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 10,
-                        background: 'rgba(6,182,212,0.1)',
-                        border: '1px solid rgba(6,182,212,0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}>
-                        <FileText size={20} color="#06b6d4" />
-                      </div>
-                      <div>
-                        <div style={{ color: '#e5e7eb', fontWeight: 700 }}>OCR Server</div>
-                        <div style={{ color: '#94a3b8', fontSize: 12 }}>Document processing service</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 999,
-                        background: ocrHealth.color
-                      }} />
-                      <div style={{ color: ocrHealth.color, fontWeight: 700, fontSize: 12 }}>{ocrHealth.status}</div>
-                    </div>
-                  </div>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                    gap: 12
-                  }}>
-                    <Metric label="UPTIME" value={ocrServerStatus.uptime.formatted} />
-                    <Metric label="PAGES" value={formatNumberSafe(ocrServerStatus.ocr?.totalPagesProcessed ?? 0)} />
-                    <Metric label="SUCCESS" value={ocrServerStatus.requests.successRate} />
-                    <Metric label="LATENCY" value={formatNumberSafe(ocrServerStatus.today.avgProcessingTime)} unit="ms" />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Refresh Button */}
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <button onClick={fetchServerStatus} disabled={loading} className="btn btn-primary" style={{ opacity: loading ? 0.6 : 1 }}>
-                <RefreshCw size={18} />
-                {loading ? 'Refreshing...' : 'Refresh Status'}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </SettingsLayout>
   );
 }

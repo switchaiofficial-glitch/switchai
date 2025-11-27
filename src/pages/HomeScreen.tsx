@@ -1,14 +1,14 @@
 import { auth, firestore } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import Lottie from 'lottie-react';
-import { Archive, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Copy, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Lightbulb, Lightbulb as LightbulbIcon, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, School, Settings, Share2, Smartphone, Square, Star, Trash2, Wand2, X, Zap } from 'lucide-react';
+import { Archive, ArrowUp, BarChart3, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Coins, Copy, Database, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Info, Lightbulb, Lightbulb as LightbulbIcon, LogOut, Mail, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Rocket, School, Search, Server, Settings, Share2, Smartphone, Sparkles, Square, Star, Trash2, TrendingDown, TrendingUp, Wand2, X, Zap } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from '../components/Markdown';
+import { buildMemorySystemPrompt, initMemoryDocument, maybeStoreFromUserMessage } from '../lib/aiMemoryService';
+import { autoSwitchModel, isAutoSwitchEnabled, setAutoSwitchEnabled, type ModelEntry } from '../lib/autoModelSwitch';
 import { cerebrasStreamCompletion } from '../lib/cerebrasClient';
-import { googleStreamCompletion } from '../lib/googleClient';
-import { mistralStreamCompletion } from '../lib/mistralClient';
 import type { AttachmentData, Chat, Message } from '../lib/chatStorage';
 import {
   addMessage,
@@ -20,17 +20,18 @@ import {
   toggleArchive,
   updateChat,
 } from '../lib/chatStorage';
+import { createDateTimeSystemMessage, isDateTimeQuery } from '../lib/dateTimeContext';
+import { googleStreamCompletion } from '../lib/googleClient';
 import { groqChatCompletion, streamChatCompletion } from '../lib/groqClient';
+import { mistralStreamCompletion } from '../lib/mistralClient';
 import type { CatalogEntry } from '../lib/modelCatalog';
 import { buildCatalog, getProviderName } from '../lib/modelCatalog';
 import { openRouterStreamCompletion } from '../lib/openRouterClient';
 import { PDFService } from '../lib/pdfService';
-import { theme } from '../theme';
-import { autoSwitchModel, detectQueryIntent, isAutoSwitchEnabled, setAutoSwitchEnabled, type ModelEntry } from '../lib/autoModelSwitch';
-import { buildMemorySystemPrompt, initMemoryDocument, maybeStoreFromUserMessage } from '../lib/aiMemoryService';
-import { createDateTimeSystemMessage, isDateTimeQuery } from '../lib/dateTimeContext';
-import { maybeInjectUserNameContext } from '../lib/userNameContext';
 import rateLimiter, { retryWithBackoff } from '../lib/requestRateLimiter';
+import { formatTokens, getUserTokenData, subscribeToTokenBalance, type UserTokenData } from '../lib/tokenService';
+import { maybeInjectUserNameContext } from '../lib/userNameContext';
+import { theme } from '../theme';
 
 interface AttachedImage {
   dataUrl: string;
@@ -194,6 +195,7 @@ export default function HomeScreen() {
   // State
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [inputHeight, setInputHeight] = useState(40); // Track input height for pill/rectangular mode
   const [sending, setSending] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
@@ -219,27 +221,119 @@ export default function HomeScreen() {
   const [renameChatId, setRenameChatId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
-  
+
   // Image and PDF attachment state
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
   const [attachedPDFs, setAttachedPDFs] = useState<AttachedPDF[]>([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
-  
+
   // Lottie animations state
   const [dotsAnimation, setDotsAnimation] = useState<any>(null);
-  
+
   // Prompt suggestion state
   const [showContextualPrompts, setShowContextualPrompts] = useState(false);
   const [selectedPromptType, setSelectedPromptType] = useState<any>(null);
   const [showAllPrompts, setShowAllPrompts] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
-  
+
   // Auto-switch state
   const [autoSwitch, setAutoSwitch] = useState<boolean>(() => isAutoSwitchEnabled());
-  
+
   // Mobile app QR modal state
   const [showMobileModal, setShowMobileModal] = useState(false);
-  
+
+  // Settings modal state
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [selectedSettingsPage, setSelectedSettingsPage] = useState<string>('overview');
+
+  // Settings data state
+  const [tokenData, setTokenData] = useState<UserTokenData | null>(null);
+  const [useForTraining, setUseForTraining] = useState(() => {
+    try {
+      return localStorage.getItem('useDataForTraining') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  // Personalization settings state (additional ones not already defined)
+  const [streamingEnabled, setStreamingEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('streamingEnabled') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const [aiMemoryEnabled, setAiMemoryEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('aiMemoryEnabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [chatHistorySearchEnabled, setChatHistorySearchEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('chatHistorySearchEnabled') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const [personality, setPersonality] = useState(() => {
+    try {
+      return localStorage.getItem('aiPersonality') || 'default';
+    } catch {
+      return 'default';
+    }
+  });
+
+  const [customInstruction, setCustomInstruction] = useState(() => {
+    try {
+      return localStorage.getItem('customInstruction') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [nickname, setNickname] = useState(() => {
+    try {
+      return localStorage.getItem('userNickname') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [occupation, setOccupation] = useState(() => {
+    try {
+      return localStorage.getItem('userOccupation') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [moreAboutYou, setMoreAboutYou] = useState(() => {
+    try {
+      return localStorage.getItem('userMoreAboutYou') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  // Model preferences state
+  const [selectedModels, setSelectedModels] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('selectedModels');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsSortBy, setModelsSortBy] = useState<'provider' | 'inference' | 'type'>('provider');
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -314,7 +408,7 @@ export default function HomeScreen() {
 
   // Persist reasoning level
   useEffect(() => {
-    try { localStorage.setItem('reasoningLevel', reasoningLevel); } catch {}
+    try { localStorage.setItem('reasoningLevel', reasoningLevel); } catch { }
   }, [reasoningLevel]);
 
   // Load chat history on mount
@@ -336,6 +430,63 @@ export default function HomeScreen() {
     loadAnimations();
   }, []);
 
+  // Load token data when settings modal opens
+  useEffect(() => {
+    if (showSettingsModal && selectedSettingsPage === 'tokens') {
+      getUserTokenData().then(setTokenData).catch(console.error);
+
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        const unsubscribe = subscribeToTokenBalance(uid, (balance) => {
+          setTokenData(prev => prev ? { ...prev, balance } : null);
+        });
+        return () => unsubscribe();
+      }
+    }
+  }, [showSettingsModal, selectedSettingsPage]);
+
+  // Save training preference
+  useEffect(() => {
+    localStorage.setItem('useDataForTraining', useForTraining ? '1' : '0');
+  }, [useForTraining]);
+
+  // Save personalization settings
+  useEffect(() => {
+    localStorage.setItem('reasoningLevel', reasoningLevel);
+  }, [reasoningLevel]);
+
+  useEffect(() => {
+    localStorage.setItem('streamingEnabled', streamingEnabled.toString());
+  }, [streamingEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('aiMemoryEnabled', aiMemoryEnabled.toString());
+  }, [aiMemoryEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('chatHistorySearchEnabled', chatHistorySearchEnabled.toString());
+  }, [chatHistorySearchEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('aiPersonality', personality);
+  }, [personality]);
+
+  useEffect(() => {
+    localStorage.setItem('customInstruction', customInstruction);
+  }, [customInstruction]);
+
+  useEffect(() => {
+    localStorage.setItem('userNickname', nickname);
+  }, [nickname]);
+
+  useEffect(() => {
+    localStorage.setItem('userOccupation', occupation);
+  }, [occupation]);
+
+  useEffect(() => {
+    localStorage.setItem('userMoreAboutYou', moreAboutYou);
+  }, [moreAboutYou]);
+
   // Clear contextual prompts when input changes significantly
   useEffect(() => {
     if (showContextualPrompts && selectedPromptType && input !== selectedPromptType.text) {
@@ -344,6 +495,34 @@ export default function HomeScreen() {
     }
   }, [input, showContextualPrompts, selectedPromptType]);
 
+  // Save selected models
+  useEffect(() => {
+    localStorage.setItem('selectedModels', JSON.stringify(selectedModels));
+  }, [selectedModels]);
+
+  // Refocus input when mode changes (pill <-> rectangular) and move cursor to end
+  // Track previous mode to detect actual mode changes
+  const isPillMode = !input.includes('\n') && inputHeight <= 75;
+  const prevPillModeRef = useRef(isPillMode);
+  
+  useEffect(() => {
+    // Only refocus if mode actually changed AND there's input text
+    if (prevPillModeRef.current !== isPillMode && input.length > 0) {
+      const timer = setTimeout(() => {
+        const ta = inputRef.current;
+        if (ta) {
+          ta.focus();
+          // Move cursor to end of text
+          const len = ta.value.length;
+          ta.setSelectionRange(len, len);
+        }
+      }, 10);
+      prevPillModeRef.current = isPillMode;
+      return () => clearTimeout(timer);
+    }
+    prevPillModeRef.current = isPillMode;
+  }, [isPillMode, input.length]);
+
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
@@ -351,6 +530,7 @@ export default function HomeScreen() {
 
   const loadModels = async () => {
     try {
+      setModelsLoading(true);
       const modelsRef = collection(firestore, 'models');
       const snapshot = await getDocs(modelsRef);
       const modelData = snapshot.docs.map(doc => ({
@@ -361,10 +541,10 @@ export default function HomeScreen() {
         reasoningLevel: doc.data().reasoningLevel,
         hasReasoning: doc.data().hasReasoning,
       }));
-      
+
       const catalog = buildCatalog(modelData);
       setModels(catalog);
-      
+
       // Set default model
       if (catalog.length > 0 && !selectedModel) {
         const savedModel = localStorage.getItem('selectedModel');
@@ -428,7 +608,7 @@ export default function HomeScreen() {
 
     toAdd.forEach((file) => {
       if (!file.type.startsWith('image/')) return;
-      
+
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result as string;
@@ -555,7 +735,7 @@ export default function HomeScreen() {
         inference: m.inference as any,
         supportsVision: m.supportsVision,
       }));
-      
+
       const switchedModel = autoSwitchModel(
         userText,
         modelEntries,
@@ -563,7 +743,7 @@ export default function HomeScreen() {
         messages.length,
         selectedModel
       );
-      
+
       if (switchedModel) {
         console.log(`🔄 Auto-switched to: ${switchedModel}`);
         setSelectedModel(switchedModel);
@@ -597,6 +777,7 @@ export default function HomeScreen() {
 
     // Clear input and attachments immediately
     setInput('');
+    setInputHeight(40);
     setAttachedImages([]);
     setAttachedPDFs([]);
 
@@ -618,7 +799,7 @@ export default function HomeScreen() {
             updateChat(chatId as string, { title: aiTitle });
             refreshChatHistory();
           }
-        } catch {}
+        } catch { }
       })();
     }
 
@@ -626,7 +807,7 @@ export default function HomeScreen() {
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     addMessage(chatId, userMessage);
-    
+
     setSending(true);
     setStreamingText('');
 
@@ -636,7 +817,7 @@ export default function HomeScreen() {
 
       // Build user message content for API
       let apiUserContent: any = userText;
-      
+
       // Prepare context prefixes
       const prefaceParts: string[] = [];
 
@@ -746,7 +927,7 @@ export default function HomeScreen() {
       const selectedEntry = models.find((m) => m.id === selectedModel);
       const isReasoningModel = !!selectedEntry?.hasReasoning || selectedEntry?.type === 'reason';
       const sysMsg = isReasoningModel ? { role: 'system', content: `Reasoning effort: ${reasoningLevel}. ${reasoningLevel === 'low' ? 'Prioritize speed and brevity. Provide a concise answer without over-explaining.' : (reasoningLevel === 'high' ? 'Prioritize thoroughness and accuracy. Consider edge cases and provide a well-structured answer. Avoid exposing internal chain-of-thought; share only conclusions.' : 'Balance quality and speed.')}` } : null;
-      
+
       // Build API messages using OCR-enriched content
       // Compress chat history to reduce tokens: keep user messages, summarize old assistant messages
       const compressedHistory = compressAssistantHistory(updatedMessages.slice(0, -1));
@@ -757,11 +938,11 @@ export default function HomeScreen() {
         role: 'user' as const,
         content: apiUserContent, // Use API content with OCR text
       }];
-      
+
       // Inject AI Memory context if enabled
       const systemMessages: any[] = [];
       if (sysMsg) systemMessages.push(sysMsg);
-      
+
       try {
         const memoryPrompt = await buildMemorySystemPrompt();
         if (memoryPrompt) {
@@ -770,25 +951,25 @@ export default function HomeScreen() {
       } catch (error) {
         console.error('Memory injection error:', error);
       }
-      
+
       // Inject date/time context if query is about date/time
       if (isDateTimeQuery(userText)) {
         const dateTimeMsg = createDateTimeSystemMessage();
         systemMessages.push(dateTimeMsg);
       }
-      
+
       // Inject user name context if query is about their name
       const userNameMsg = maybeInjectUserNameContext(userText);
       if (userNameMsg) {
         systemMessages.push(userNameMsg);
       }
-      
+
       const apiMessages = systemMessages.length > 0 ? [...systemMessages, ...apiMessagesForApi] : apiMessagesForApi;
 
       let fullResponse = '';
       streamBufferRef.current = '';
       lastUpdateRef.current = Date.now();
-      
+
       // Throttled update function - only update UI every 50ms max
       const throttledUpdate = (text: string) => {
         streamBufferRef.current = text;
@@ -806,11 +987,11 @@ export default function HomeScreen() {
           lastUpdateRef.current = Date.now();
         }
       }, 120);
-      
-  // Determine routing based on Firestore 'inference' only. Default is Groq.
-  const provider = getProviderName(selectedModel); // for display only
-  const rawPref = (selectedEntry?.inference || '').toString().toLowerCase();
-  const inferencePref = rawPref === 'openrouter' || rawPref === 'cerebras' || rawPref === 'groq' || rawPref === 'mistral' || rawPref === 'google' ? rawPref : 'groq';
+
+      // Determine routing based on Firestore 'inference' only. Default is Groq.
+      const provider = getProviderName(selectedModel); // for display only
+      const rawPref = (selectedEntry?.inference || '').toString().toLowerCase();
+      const inferencePref = rawPref === 'openrouter' || rawPref === 'cerebras' || rawPref === 'groq' || rawPref === 'mistral' || rawPref === 'google' ? rawPref : 'groq';
 
       if (inferencePref === 'groq') {
         // Stream via Groq with retry logic
@@ -829,7 +1010,7 @@ export default function HomeScreen() {
             signal: abortControllerRef.current?.signal,
           });
         }, 3, 1000);
-  } else if (inferencePref === 'openrouter') {
+      } else if (inferencePref === 'openrouter') {
         // Stream via OpenRouter
         await openRouterStreamCompletion({
           model: selectedModel,
@@ -919,7 +1100,7 @@ export default function HomeScreen() {
       setMessages(finalMessages);
       addMessage(chatId, assistantMessage);
       setStreamingText('');
-      
+
       // Update chat title using AI if it's still default
       const chat = getChat(chatId);
       if (chat && (chat.title === 'New Chat' || !chat.title)) {
@@ -949,7 +1130,7 @@ export default function HomeScreen() {
       }
       setStreamingText('');
     } finally {
-      try { clearInterval(flushTimer as any); } catch {}
+      try { clearInterval(flushTimer as any); } catch { }
       setSending(false);
       abortControllerRef.current = null;
     }
@@ -1011,7 +1192,7 @@ export default function HomeScreen() {
         set.add(modelId);
       }
       const next = Array.from(set);
-      try { localStorage.setItem('favoriteModels', JSON.stringify(next)); } catch {}
+      try { localStorage.setItem('favoriteModels', JSON.stringify(next)); } catch { }
       return next;
     });
   };
@@ -1034,7 +1215,7 @@ export default function HomeScreen() {
   const isReasoningSelected = !!(selectedEntryForReason?.hasReasoning || selectedEntryForReason?.type === 'reason');
   const isVisionModelSelected = !!(selectedEntryForReason?.supportsVision || selectedEntryForReason?.type === 'vision');
   const [showReasoningMenu, setShowReasoningMenu] = useState(false);
-  const setReasoning = (lvl: 'low'|'medium'|'high') => { setReasoningLevel(lvl); setShowReasoningMenu(false); };
+  const setReasoning = (lvl: 'low' | 'medium' | 'high') => { setReasoningLevel(lvl); setShowReasoningMenu(false); };
 
   // Sidebar hover/menu state
   const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
@@ -1158,23 +1339,24 @@ export default function HomeScreen() {
     setShowContextualPrompts(false);
     setSelectedPromptType(null);
     setInput('');
+    setInputHeight(40);
   };
 
   // Edit user message
   const handleEditMessage = (messageId: string) => {
     const message = messages.find(m => m.id === messageId);
     if (!message || message.role !== 'user') return;
-    
+
     // Set input to message content
     const content = typeof message.content === 'string' ? message.content : '';
     setInput(content);
-    
+
     // Remove all messages from this point forward
     const messageIndex = messages.findIndex(m => m.id === messageId);
     if (messageIndex !== -1) {
       const newMessages = messages.slice(0, messageIndex);
       setMessages(newMessages);
-      
+
       // Update chat storage
       if (currentChatId) {
         const chat = getChat(currentChatId);
@@ -1183,7 +1365,7 @@ export default function HomeScreen() {
         }
       }
     }
-    
+
     // Focus input
     inputRef.current?.focus();
   };
@@ -1191,24 +1373,24 @@ export default function HomeScreen() {
   // Regenerate assistant response
   const handleRegenerateResponse = async (messageId: string) => {
     if (sending) return; // Prevent if already sending
-    
+
     const messageIndex = messages.findIndex(m => m.id === messageId);
     if (messageIndex === -1) return;
-    
+
     // Find the user message that prompted this response
     let userMessageIndex = messageIndex - 1;
     while (userMessageIndex >= 0 && messages[userMessageIndex].role !== 'user') {
       userMessageIndex--;
     }
-    
+
     if (userMessageIndex < 0) return;
-    
+
     const userMessage = messages[userMessageIndex];
-    
+
     // Remove the assistant message and everything after it (keep user message)
     const newMessages = messages.slice(0, messageIndex);
     setMessages(newMessages);
-    
+
     // Update chat storage
     if (currentChatId) {
       const chat = getChat(currentChatId);
@@ -1216,17 +1398,17 @@ export default function HomeScreen() {
         updateChat(currentChatId, { messages: newMessages });
       }
     }
-    
+
     // Directly trigger streaming with existing messages (don't add duplicate user message)
     setSending(true);
     setStreamingText('');
-    
+
     const selectedEntry = models.find((m) => m.id === selectedModel);
     if (!selectedEntry) {
       setSending(false);
       return;
     }
-    
+
     try {
       // Stream response directly without adding a new user message
       await streamResponse(newMessages, selectedEntry);
@@ -1281,6 +1463,7 @@ export default function HomeScreen() {
 
     // Clear input and attachments
     setInput('');
+    setInputHeight(40);
     setAttachedImages([]);
     setAttachedPDFs([]);
 
@@ -1487,22 +1670,21 @@ export default function HomeScreen() {
       maxWidth: '100vw',
       background: theme.colors.background,
       color: theme.colors.text,
-      fontFamily: 'SUSE, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      fontFamily: 'Varela Round, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       overflow: 'hidden',
       overscrollBehavior: 'none',
       position: 'relative',
     }}>
       {/* Clean background without decorative geometry */}
 
-      {/* Outside clicks handled via document listener */}
       {/* Sidebar */}
       <div style={{
         // Overlay full screen on mobile, fixed position
         position: isMobile ? 'fixed' as const : 'relative' as const,
         left: isMobile ? 0 : undefined,
         top: isMobile ? 0 : undefined,
-        width: isMobile ? (sidebarOpen ? '100vw' : '0') : (sidebarOpen ? '280px' : '0'),
-        minWidth: isMobile ? '0' : (sidebarOpen ? '280px' : '0'),
+        width: isMobile ? (sidebarOpen ? '100vw' : '0') : (sidebarOpen ? '15vw' : '60px'),
+        minWidth: isMobile ? '0' : (sidebarOpen ? '17vw' : '60px'),
         background: theme.colors.surface,
         borderRight: `1px solid ${theme.colors.border}`,
         display: 'flex',
@@ -1513,338 +1695,482 @@ export default function HomeScreen() {
         minHeight: 0,
         zIndex: isMobile ? 1000 : 'auto',
         pointerEvents: isMobile ? (sidebarOpen ? 'auto' : 'none') : 'auto',
-        // Remove heavy blur for a cleaner feel
-        // backdropFilter intentionally removed
         userSelect: 'none',
         WebkitUserSelect: 'none',
         MozUserSelect: 'none',
         msUserSelect: 'none'
       }}>
-        {/* Sidebar Header with Search */}
-        <div style={{ padding: '12px', borderBottom: `1px solid ${theme.colors.border}`, position: 'relative' }}>
-          {isMobile && (
+        {/* Collapsed Sidebar (Icon-only) - Desktop Only */}
+        {!sidebarOpen && !isMobile && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            padding: '12px 0',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            {/* Expand Sidebar Button */}
             <button
-              onClick={() => setSidebarOpen(false)}
-              aria-label="Close sidebar"
+              onClick={() => setSidebarOpen(true)}
+              title="Expand sidebar"
               style={{
-                position: 'absolute',
-                right: 12,
-                top: 12,
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                background: 'rgba(255,255,255,0.1)',
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: 'rgba(255, 255, 255, 0.08)',
                 border: `1px solid ${theme.colors.border}`,
                 color: theme.colors.text,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                zIndex: 1,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
               }}
             >
-              <X size={16} />
+              <ChevronRight size={20} />
             </button>
-          )}
-          
-          {/* Search Bar */}
-          <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', zIndex: 1 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 21L16.5 16.5M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px 10px 40px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: '12px',
-                color: theme.colors.text,
-                fontSize: '14px',
-                outline: 'none',
-              }}
-            />
-          </div>
-        </div>
 
-        {/* Quick Actions */}
-        <div style={{ padding: '12px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {/* New Chat Button */}
             <button
               onClick={handleNewChat}
+              title="New chat"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: 'rgba(255, 255, 255, 0.08)',
                 border: `1px solid ${theme.colors.border}`,
-                borderRadius: '12px',
                 color: theme.colors.text,
                 cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '600',
-                width: '100%',
-                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
               }}
             >
-              <Plus size={18} />
-              <span>New chat</span>
+              <Pencil size={18} />
             </button>
-            
+
+            {/* Search Button */}
             <button
-              onClick={() => setArchiveExpanded(!archiveExpanded)}
+              onClick={() => setSidebarOpen(true)}
+              title="Search"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: 'rgba(255, 255, 255, 0.08)',
                 border: `1px solid ${theme.colors.border}`,
-                borderRadius: '12px',
                 color: theme.colors.text,
                 cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '600',
-                width: '100%',
-                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
               }}
             >
-              <Archive size={18} />
-              <span>Archive</span>
-              <ChevronDown size={16} style={{ marginLeft: 'auto', transform: archiveExpanded ? 'rotate(180deg)' : 'none' }} />
+              <Search size={18} />
             </button>
-          </div>
-        </div>
 
-        {/* Chat History */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 12px' }}>
-          {activeChats.length > 0 && (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{
-                padding: '8px 0', color: theme.colors.textMuted,
-                fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px',
-              }}>
-                Chats ({activeChats.length})
-              </div>
-              {activeChats.map((chat) => (
-                <div
-                  key={chat.id}
-                  onMouseEnter={() => setHoveredChatId(chat.id)}
-                  onMouseLeave={() => { if (hoveredChatId === chat.id) setHoveredChatId(null); }}
-                  onClick={() => loadChat(chat.id)}
-                  style={{
-                    position: 'relative',
-                    padding: '10px 12px', borderRadius: '12px', cursor: 'pointer', marginBottom: '6px',
-                    background: currentChatId === chat.id
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : (hoveredChatId === chat.id ? 'rgba(255,255,255,0.06)' : 'transparent'),
-                    border: currentChatId === chat.id ? `1px solid ${theme.colors.borderLight}` : '1px solid transparent',
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    transition: 'background 0.15s ease',
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: theme.colors.text, fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {chat.title}
-                    </div>
-                    {chat.lastMessage && (
-                      <div style={{ color: theme.colors.textSecondary, fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {chat.lastMessage}
-                      </div>
-                    )}
-                  </div>
-                  {hoveredChatId === chat.id && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setMenuOpenChatId(chat.id); }}
-                      title="More"
-                      style={{
-                        width: 28, height: 28, borderRadius: 8,
-                        background: 'rgba(255,255,255,0.06)', border: `1px solid ${theme.colors.border}`,
-                        color: theme.colors.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                      }}
-                    >
-                      <MoreHorizontal size={16} />
-                    </button>
-                  )}
+            {/* Spacer */}
+            <div style={{ flex: 1 }} />
 
-                  {menuOpenChatId === chat.id && (
-                    <>
-                      <div ref={menuRef} style={{ position: 'absolute', right: 8, top: 40, zIndex: 1001, background: theme.colors.surfaceAlt, border: `1px solid ${theme.colors.border}`, borderRadius: 10, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }} onClick={(e)=>e.stopPropagation()} onMouseDown={(e)=>e.stopPropagation()}>
-                        <div onClick={() => { closeChatMenu(); handleShareChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
-                          onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.06)'; }}
-                          onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='transparent'; }}>
-                          <Share2 size={14} /> <span>Share</span>
-                        </div>
-                        <div onClick={() => { closeChatMenu(); handleRenameChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
-                          onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.06)'; }}
-                          onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='transparent'; }}>
-                          <Edit3 size={14} /> <span>Rename</span>
-                        </div>
-                        <div onClick={() => { closeChatMenu(); handleToggleArchive(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
-                          onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.06)'; }}
-                          onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='transparent'; }}>
-                          <Archive size={14} /> <span>{chat.archived ? 'Unarchive' : 'Archive'}</span>
-                        </div>
-                        <div onClick={() => { closeChatMenu(); handleDeleteChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.error, cursor:'pointer', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:8 }}
-                          onMouseEnter={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='rgba(239,68,68,0.12)'; }}
-                          onMouseLeave={(e)=>{ (e.currentTarget as HTMLDivElement).style.background='transparent'; }}>
-                          <Trash2 size={14} /> <span>Delete</span>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {archivedChats.length > 0 && archiveExpanded && (
-            <div>
-              <div style={{ padding: '8px 0', borderTop: `1px solid ${theme.colors.border}`, marginTop: '12px' }}>
-                <div style={{ color: theme.colors.textMuted, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Archived
-                </div>
-              </div>
-              {archivedChats.map((chat) => (
-                <div
-                  key={chat.id}
-                  onMouseEnter={() => setHoveredChatId(chat.id)}
-                  onMouseLeave={() => { if (hoveredChatId === chat.id) setHoveredChatId(null); }}
-                  onClick={() => loadChat(chat.id)}
-                  style={{
-                    position: 'relative',
-                    padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', marginBottom: '6px', opacity: 0.92,
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    background: hoveredChatId === chat.id ? 'rgba(255,255,255,0.06)' : 'transparent',
-                    transition: 'background 0.15s ease'
-                  }}
-                >
-                  <div style={{ color: theme.colors.text, fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex:1 }}>{chat.title}</div>
-                  {hoveredChatId === chat.id && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setMenuOpenChatId(chat.id); }}
-                      title="More"
-                      style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: `1px solid ${theme.colors.border}`, color: '#e5e7eb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <MoreHorizontal size={16} />
-                    </button>
-                  )}
-                  {menuOpenChatId === chat.id && (
-                    <>
-                      <div ref={menuRef} style={{ position: 'absolute', right: 8, top: 40, zIndex: 1001, background: 'rgba(26,28,34,0.98)', border: `1px solid ${theme.colors.border}`, borderRadius: 10, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }} onClick={(e)=>e.stopPropagation()}>
-                        <div onClick={() => { closeChatMenu(); handleShareChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color:'#e5e7eb', cursor:'pointer', whiteSpace:'nowrap' }}>Share</div>
-                        <div onClick={() => { closeChatMenu(); handleRenameChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color:'#e5e7eb', cursor:'pointer', whiteSpace:'nowrap' }}>Rename</div>
-                        <div onClick={() => { closeChatMenu(); handleToggleArchive(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color:'#e5e7eb', cursor:'pointer', whiteSpace:'nowrap' }}>{chat.archived ? 'Unarchive' : 'Archive'}</div>
-                        <div onClick={() => { closeChatMenu(); handleDeleteChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color:'#fca5a5', cursor:'pointer', whiteSpace:'nowrap' }}>Delete</div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Account Section */}
-        <div style={{ padding: '14px', borderTop: `1px solid ${theme.colors.border}` }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', borderRadius: '12px',
-          }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: `1px solid ${theme.colors.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)' }}>
+            {/* User Profile Button at Bottom */}
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              title={user?.displayName || 'User'}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                border: `1px solid ${theme.colors.border}`,
+                color: '#fff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '16px',
+                fontWeight: '700',
+                transition: 'all 0.15s ease',
+                overflow: 'hidden',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
               {user?.photoURL && !avatarError ? (
                 <img
                   src={user.photoURL}
                   alt={user?.displayName || user?.email || 'User'}
                   onError={() => setAvatarError(true)}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <span style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>
+                <span>
                   {(user?.displayName?.[0] || user?.email?.[0] || 'U').toUpperCase()}
                 </span>
               )}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {user?.displayName || 'User'}
-              </div>
-              <div style={{ fontSize: '12px', color: theme.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {user?.email || 'Not signed in'}
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowMobileModal(true);
-                }}
-                title="Download Mobile App"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: '8px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: theme.colors.textMuted,
-                  transition: 'color 0.2s',
-                  borderRadius: '8px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = theme.colors.primary;
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = theme.colors.textMuted;
-                  e.currentTarget.style.background = 'none';
-                }}
-              >
-                <Smartphone size={18} />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate('/settings');
-                }}
-                title="Settings"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: '8px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: theme.colors.textMuted,
-                  transition: 'color 0.2s',
-                  borderRadius: '8px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = theme.colors.primary;
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = theme.colors.textMuted;
-                  e.currentTarget.style.background = 'none';
-                }}
-              >
-                <Settings size={18} />
-              </button>
-            </div>
+            </button>
           </div>
-        </div>
+        )}
+
+        {/* Expanded Sidebar - Full Width */}
+        {sidebarOpen && (
+          <>
+            {/* Sidebar Header - Logo and Collapse */}
+            <div style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              {/* Logo */}
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Sparkles size={18} color="#fff" strokeWidth={2.5} />
+              </div>
+
+              {/* Collapse Button */}
+              <button
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  background: 'transparent',
+                  border: 'none',
+                  color: theme.colors.textMuted,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <ChevronLeft size={20} />
+              </button>
+            </div>
+
+            {/* Main Actions */}
+            <div style={{ padding: '0 12px 12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {/* New chat */}
+                <button
+                  onClick={handleNewChat}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: theme.colors.text,
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '400',
+                    width: '100%',
+                    textAlign: 'left',
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <Pencil size={18} />
+                  <span>New chat</span>
+                </button>
+
+                {/* Search chats */}
+                <button
+                  onClick={() => {
+                    // Focus search input
+                    const searchInput = document.querySelector('input[placeholder="Search"]') as HTMLInputElement;
+                    searchInput?.focus();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: theme.colors.text,
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '400',
+                    width: '100%',
+                    textAlign: 'left',
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <Search size={18} />
+                  <span>Search chats</span>
+                </button>
+              </div>
+            </div>
+
+
+
+            {/* Chat History */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 12px' }}>
+              {activeChats.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{
+                    padding: '8px 0', color: theme.colors.textMuted,
+                    fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px',
+                  }}>
+                    Chats ({activeChats.length})
+                  </div>
+                  {activeChats.map((chat) => (
+                    <div
+                      key={chat.id}
+                      onMouseEnter={() => setHoveredChatId(chat.id)}
+                      onMouseLeave={() => { if (hoveredChatId === chat.id) setHoveredChatId(null); }}
+                      onClick={() => loadChat(chat.id)}
+                      style={{
+                        position: 'relative',
+                        padding: '7px 12px', borderRadius: '12px', cursor: 'pointer', marginBottom: '0px',
+                        background: currentChatId === chat.id
+                          ? 'rgba(255, 255, 255, 0.08)'
+                          : (hoveredChatId === chat.id ? 'rgb(48, 48, 48)' : 'transparent'),
+                        border: currentChatId === chat.id ? `1px solid ${theme.colors.borderLight}` : '1px solid transparent',
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: theme.colors.text, fontSize: '18px', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {chat.title}
+                        </div>
+
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setMenuOpenChatId(chat.id); }}
+                        title="More"
+                        style={{
+                          width: 32, height: 32, borderRadius: 8,
+                          background: 'transparent', border: 'none',
+                          color: theme.colors.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          opacity: hoveredChatId === chat.id ? 1 : 0,
+                          pointerEvents: hoveredChatId === chat.id ? 'auto' : 'none',
+                        }}
+                      >
+                        <MoreHorizontal size={20} />
+                      </button>
+
+                      {menuOpenChatId === chat.id && (
+                        <>
+                          <div ref={menuRef} style={{ position: 'absolute', right: 8, top: 40, zIndex: 1001, background: theme.colors.surfaceAlt, border: `1px solid ${theme.colors.border}`, borderRadius: 10, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                            <div onClick={() => { closeChatMenu(); handleShareChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8 }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
+                              <Share2 size={14} /> <span>Share</span>
+                            </div>
+                            <div onClick={() => { closeChatMenu(); handleRenameChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8 }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
+                              <Edit3 size={14} /> <span>Rename</span>
+                            </div>
+                            <div onClick={() => { closeChatMenu(); handleToggleArchive(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.text, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8 }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
+                              <Archive size={14} /> <span>{chat.archived ? 'Unarchive' : 'Archive'}</span>
+                            </div>
+                            <div onClick={() => { closeChatMenu(); handleDeleteChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: theme.colors.error, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8 }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(239,68,68,0.12)'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
+                              <Trash2 size={14} /> <span>Delete</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {archivedChats.length > 0 && archiveExpanded && (
+                <div>
+                  <div style={{ padding: '8px 0', borderTop: `1px solid ${theme.colors.border}`, marginTop: '12px' }}>
+                    <div style={{ color: theme.colors.textMuted, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Archived
+                    </div>
+                  </div>
+                  {archivedChats.map((chat) => (
+                    <div
+                      key={chat.id}
+                      onMouseEnter={() => setHoveredChatId(chat.id)}
+                      onMouseLeave={() => { if (hoveredChatId === chat.id) setHoveredChatId(null); }}
+                      onClick={() => loadChat(chat.id)}
+                      style={{
+                        position: 'relative',
+                        padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', marginBottom: '8px', opacity: 0.92,
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        background: hoveredChatId === chat.id ? 'rgb(48, 48, 48)' : 'transparent',
+                      }}
+                    >
+                      <div style={{ color: theme.colors.text, fontSize: '15px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{chat.title}</div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setMenuOpenChatId(chat.id); }}
+                        title="More"
+                        style={{ width: 32, height: 32, borderRadius: 8, background: 'transparent', border: 'none', color: '#e5e7eb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: hoveredChatId === chat.id ? 1 : 0, pointerEvents: hoveredChatId === chat.id ? 'auto' : 'none' }}
+                      >
+                        <MoreHorizontal size={20} />
+                      </button>
+                      {menuOpenChatId === chat.id && (
+                        <>
+                          <div ref={menuRef} style={{ position: 'absolute', right: 8, top: 40, zIndex: 1001, background: 'rgba(26,28,34,0.98)', border: `1px solid ${theme.colors.border}`, borderRadius: 10, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }} onClick={(e) => e.stopPropagation()}>
+                            <div onClick={() => { closeChatMenu(); handleShareChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: '#e5e7eb', cursor: 'pointer', whiteSpace: 'nowrap' }}>Share</div>
+                            <div onClick={() => { closeChatMenu(); handleRenameChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: '#e5e7eb', cursor: 'pointer', whiteSpace: 'nowrap' }}>Rename</div>
+                            <div onClick={() => { closeChatMenu(); handleToggleArchive(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: '#e5e7eb', cursor: 'pointer', whiteSpace: 'nowrap' }}>{chat.archived ? 'Unarchive' : 'Archive'}</div>
+                            <div onClick={() => { closeChatMenu(); handleDeleteChat(chat.id); }} style={{ padding: '8px 10px', borderRadius: 8, color: '#fca5a5', cursor: 'pointer', whiteSpace: 'nowrap' }}>Delete</div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Account Section */}
+            <div style={{ padding: '14px', borderTop: `1px solid ${theme.colors.border}` }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', borderRadius: '12px',
+              }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: `1px solid ${theme.colors.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)' }}>
+                  {user?.photoURL && !avatarError ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user?.displayName || user?.email || 'User'}
+                      onError={() => setAvatarError(true)}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>
+                      {(user?.displayName?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user?.displayName || 'User'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: theme.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user?.email || 'Not signed in'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowMobileModal(true);
+                    }}
+                    title="Download Mobile App"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: '8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: theme.colors.textMuted,
+                      transition: 'color 0.2s',
+                      borderRadius: '8px',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = theme.colors.primary;
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = theme.colors.textMuted;
+                      e.currentTarget.style.background = 'none';
+                    }}
+                  >
+                    <Smartphone size={18} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowSettingsModal(true);
+                    }}
+                    title="Settings"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: '8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: theme.colors.textMuted,
+                      transition: 'color 0.2s',
+                      borderRadius: '8px',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = theme.colors.primary;
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = theme.colors.textMuted;
+                      e.currentTarget.style.background = 'none';
+                    }}
+                  >
+                    <Settings size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Main Content */}
-      <div style={{ 
-        flex: 1, 
-        display: 'flex', 
+      <div style={{
+        flex: 1,
+        display: 'flex',
         flexDirection: 'column',
         minWidth: 0,
         minHeight: 0,
@@ -1852,160 +2178,168 @@ export default function HomeScreen() {
         height: '100%',
         position: 'relative',
       }}>
-        {/* Sidebar Toggle Button */}
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          style={{
-            position: 'absolute',
-            top: '10px',
-            left: '20px',
-            zIndex: 10,
-            width: '40px',
-            height: '40px',
-            borderRadius: '12px',
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: `1px solid ${theme.colors.border}`,
-            color: theme.colors.text,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'background 0.15s ease, border-color 0.15s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-          }}
-        >
-          {sidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
-        </button>
+        {/* Top Header Bar with Model Selector and Sidebar Toggle */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '60px',
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 20px',
+          gap: '12px',
+          background: 'linear-gradient(180deg, rgba(33, 33, 33, 0.95) 0%, rgba(33, 33, 33, 0.7) 70%, transparent 100%)',
+          backdropFilter: 'blur(8px)',
+        }}>
+          {/* Model Selector */}
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowModelPicker(!showModelPicker)} style={{
+              display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px',
+              background: 'rgba(255, 255, 255, 0.08)', border: `1.5px solid rgba(255,255,255,0.12)`,
+              borderRadius: '14px', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              maxWidth: '280px',
+            }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              }}
+            >
+              <Sparkles size={16} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedModelObj?.label || 'Select Model'}
+              </span>
+              <ChevronDown size={14} />
+            </button>
+
+            {showModelPicker && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowModelPicker(false)} />
+                <div style={{ position: 'absolute', top: '48px', left: 0, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: 'rgba(15, 15, 15, 0.98)', border: `1.5px solid rgba(255,255,255,0.15)`, borderRadius: '20px', padding: '14px', zIndex: 1500, boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)' }}>
+                  <div style={{ padding: '12px 8px 12px', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: '12px' }}>
+                    <div style={{ fontSize: '18px', fontWeight: '700', color: theme.colors.text, marginBottom: '6px', letterSpacing: '-0.02em' }}>Choose Model</div>
+                    <div style={{ fontSize: '13px', color: theme.colors.textSecondary }}>{models.length} models available</div>
+                  </div>
+                  {(() => {
+                    const favoritesSet = new Set(favoriteModels);
+                    const byProvider = (prov: string) => models.filter(m => (m.inference || 'groq').toLowerCase() === prov.toLowerCase());
+                    const favorites = models.filter(m => favoritesSet.has(m.id));
+                    const groq = byProvider('groq');
+                    const cerebras = byProvider('cerebras');
+                    const openrouter = byProvider('openrouter');
+
+                    const Card = ({ model }: { model: CatalogEntry }) => {
+                      const inferenceName = model.inference || 'groq';
+                      const inferenceDisplay = inferenceName.charAt(0).toUpperCase() + inferenceName.slice(1);
+                      const inferenceColors: Record<string, { bg: string; text: string }> = {
+                        groq: { bg: 'rgba(249, 115, 22, 0.15)', text: '#fb923c' },
+                        mistral: { bg: 'rgba(139, 92, 246, 0.15)', text: '#a78bfa' },
+                        cerebras: { bg: 'rgba(236, 72, 153, 0.15)', text: '#f472b6' },
+                        openrouter: { bg: 'rgba(59, 130, 246, 0.15)', text: '#60a5fa' },
+                        google: { bg: 'rgba(34, 197, 94, 0.15)', text: '#4ade80' },
+                      };
+                      const inferenceStyle = inferenceColors[inferenceName.toLowerCase()] || inferenceColors.groq;
+                      const isFav = favoritesSet.has(model.id);
+                      return (
+                        <div
+                          onClick={() => handleModelSelect(model.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 12px', borderRadius: '12px', cursor: 'pointer', background: selectedModel === model.id ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)', border: selectedModel === model.id ? '1.5px solid rgba(255,255,255,0.16)' : '1px solid rgba(255,255,255,0.06)', transition: 'background 0.15s ease, border-color 0.15s ease' }}
+                          onMouseEnter={(e) => { if (selectedModel !== model.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; } }}
+                          onMouseLeave={(e) => { if (selectedModel !== model.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; } }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '14px', fontWeight: '600', color: theme.colors.text, marginBottom: '8px', lineHeight: '1.3' }}>{model.label}</div>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                              <span style={{ fontSize: '11px', fontWeight: '600', padding: '4px 8px', borderRadius: '8px', background: inferenceStyle.bg, color: inferenceStyle.text, border: `1px solid ${inferenceStyle.text}33`, textTransform: 'capitalize', letterSpacing: '0.02em' }}>⚡ {inferenceDisplay}</span>
+                              <span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.12)', background: 'rgba(255, 255, 255, 0.05)', color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{model.type}</span>
+                              <span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.2)' }}>{model.provider || getProviderName(model.id)}</span>
+                              {model.hasReasoning && (<span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa', border: '1px solid rgba(168, 85, 247, 0.25)' }}>💡 Reasoning</span>)}
+                              {model.supportsVision && (<span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.25)' }}>👁️ Vision</span>)}
+                            </div>
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); toggleFavoriteModel(model.id); }} title={isFav ? 'Remove from favorites' : 'Add to favorites'} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: isFav ? '#facc15' : theme.colors.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                            <Star size={16} fill={isFav ? '#facc15' : 'transparent'} />
+                          </button>
+                          {selectedModel === model.id && (
+                            <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <Check size={12} color="#fff" strokeWidth={3} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    };
+
+                    const Section = ({ title, items }: { title: string; items: CatalogEntry[] }) => (
+                      items.length === 0 ? null : (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '.05em', margin: '8px 4px' }}>{title}</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {items.map(m => <Card key={m.id} model={m} />)}
+                          </div>
+                        </div>
+                      )
+                    );
+
+                    const favoritesSorted = models.filter(m => favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                    const groqSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'groq' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                    const cerebrasSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'cerebras' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                    const mistralSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'mistral' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                    const googleSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'google' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                    const openrouterSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'openrouter' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+
+                    return (
+                      <>
+                        <Section title="Favorites" items={favoritesSorted} />
+                        <Section title="Groq" items={groqSorted} />
+                        <Section title="Cerebras" items={cerebrasSorted} />
+                        <Section title="Mistral" items={mistralSorted} />
+                        <Section title="Google" items={googleSorted} />
+                        <Section title="OpenRouter" items={openrouterSorted} />
+                      </>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Messages Area */}
-        <div ref={messagesContainerRef} onScroll={handleScroll} style={{ 
+        <div ref={messagesContainerRef} onScroll={handleScroll} style={{
           flex: '1 1 0%',
-          minHeight: 0, 
-          overflowY: 'auto', 
+          minHeight: 0,
+          overflowY: 'auto',
           overflowX: 'hidden',
-          padding: '20px', 
+          padding: '20px',
+          paddingTop: '80px', // make room for top header
           paddingBottom: '220px', // make room for floating input
-          display: 'flex', 
-          flexDirection: 'column', 
+          display: 'flex',
+          flexDirection: 'column',
           gap: '16px',
           overscrollBehavior: 'contain', // isolate scroll here
           WebkitOverflowScrolling: 'touch',
-          filter: showContextualPrompts ? 'blur(2px)' : 'none',
-          pointerEvents: showContextualPrompts ? 'none' : 'auto',
-          transition: 'filter 0.3s ease',
         }}>
           {messages.length === 0 && !streamingText ? (
             <div style={{
-              flex: 1, display: 'flex', flexDirection: 'column', 
-              alignItems: 'center', justifyContent: 'center', gap: '20px',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'flex-start',
+              paddingTop: 'calc(35vh - 60px)', // Position above the input footer at 40%
+              padding: '40px 20px',
             }}>
-
+              {/* Simple greeting text like ChatGPT */}
               <div style={{
-                fontSize: '48px', 
-                fontWeight: '800',
+                fontSize: '32px',
+                fontWeight: '600',
                 color: theme.colors.text,
+                textAlign: 'center',
+                marginBottom: '12px',
+                letterSpacing: '-0.02em',
               }}>
-                SwitchAi
-              </div>
-              
-              {/* Tagline */}
-              <div style={{ 
-                fontSize: '18px', 
-                color: theme.colors.textMuted,
-                fontWeight: '500',
-              }}>
-                AI-Powered Intelligence
-              </div>
-              
-              {/* Prompt */}
-              <div style={{ 
-                fontSize: '18px', 
-                color: theme.colors.textMuted, 
-                marginTop: '16px',
-                fontWeight: 600,
-              }}>
-                What can I help with?
-              </div>
-
-              {/* Prompt Suggestions */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                gap: 12,
-                justifyContent: 'center',
-                alignItems: 'center',
-                marginTop: 16,
-                maxWidth: '600px',
-                width: '100%',
-              }}>
-                {(() => {
-                  // Build the list to render: visible prompts, plus a More/Show less chip
-                  const items = [...visiblePrompts];
-                  const moreChip = showAllPrompts
-                    ? { title: 'Show less', icon: 'chevron-up-circle-outline', iconColor: '#9CA3AF', text: '', contextual: [] }
-                    : { title: 'More', icon: 'dots-horizontal-circle-outline', iconColor: '#9CA3AF', text: '', contextual: [] };
-                  items.push(moreChip);
-
-                  return items.map((p) => {
-                    const IconComponent = getIconComponent(p.icon);
-                    return (
-                      <button
-                        key={p.title}
-                        onClick={() => {
-                          if (p.title === 'More') {
-                            expandPrompts();
-                          } else if (p.title === 'Show less') {
-                            collapsePrompts();
-                          } else {
-                            handleChipClick(p);
-                          }
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 8,
-                          padding: '12px 16px',
-                          borderRadius: 999,
-                          border: `1px solid ${theme.colors.border}`,
-                          background: 'rgba(255, 255, 255, 0.04)',
-                          color: theme.colors.text,
-                          cursor: 'pointer',
-                          fontSize: 14,
-                          fontWeight: 600,
-                          letterSpacing: 0.2,
-                          transition: 'background 0.15s ease, border-color 0.15s ease',
-                          whiteSpace: 'nowrap',
-                          width: 'auto',
-                          flexShrink: 0,
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
-                          e.currentTarget.style.borderColor = theme.colors.borderLight;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-                          e.currentTarget.style.borderColor = theme.colors.border;
-                        }}
-                      >
-                        <IconComponent size={18} color={p.iconColor} />
-                        <span style={{ 
-                          whiteSpace: 'nowrap',
-                          color: '#ffffff',
-                          fontWeight: 'bold',
-                        }}>
-                          {p.title}
-                        </span>
-                      </button>
-                    );
-                  });
-                })()}
+                How can I help you today?
               </div>
             </div>
           ) : (
@@ -2013,218 +2347,218 @@ export default function HomeScreen() {
               {messages.map((msg, msgIndex) => {
                 const isLastAssistantMessage = msg.role === 'assistant' && msgIndex === messages.length - 1;
                 const showActions = msg.role === 'user' ? hoveredMessageId === msg.id : isLastAssistantMessage;
-                
+
                 return (
-                <div
-                  key={msg.id}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: '900px', width: '100%', margin: '0 auto',
-                    gap: 6,
-                    animation: 'sa-fade-in .18s ease',
-                    position: 'relative',
-                  }}
-                  onMouseEnter={() => msg.role === 'user' && setHoveredMessageId(msg.id)}
-                  onMouseLeave={() => msg.role === 'user' && setHoveredMessageId(null)}
-                >
-                  <div style={msg.role === 'user' ? {
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    border: `1px solid ${theme.colors.border}`,
-                    borderRadius: 16,
-                    padding: '0px 16px',
-                    maxWidth: '80%',
-                    position: 'relative',
-                  } : {
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                    width: '100%',
-                    maxWidth: '100%',
-                    color: theme.colors.text,
-                    position: 'relative',
-                  }}>
-                    {/* Show attachments if present */}
-                    {msg.attachments && msg.attachments.length > 0 && (
-                      <div style={{ 
-                        display: 'flex', 
-                        flexWrap: 'wrap', 
-                        gap: '8px', 
-                        padding: '12px 0',
-                        paddingTop: msg.role === 'user' ? '12px' : '0',
-                      }}>
-                        {msg.attachments.map((att, idx) => (
-                          att.type === 'image' ? (
-                            <div key={idx} style={{ 
-                              position: 'relative',
-                              width: '120px',
-                              height: '120px',
-                              borderRadius: '12px',
-                              overflow: 'hidden',
-                              border: '2px solid rgba(99, 102, 241, 0.3)',
-                              background: 'rgba(0, 0, 0, 0.3)',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => window.open(att.dataUrl, '_blank')}
-                            >
-                              <img 
-                                src={att.dataUrl} 
-                                alt={`Attachment ${idx + 1}`}
-                                style={{ 
-                                  width: '100%', 
-                                  height: '100%', 
-                                  objectFit: 'cover' 
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div key={idx} style={{ 
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              padding: '10px 14px',
-                              borderRadius: '10px',
-                              background: 'rgba(59, 130, 246, 0.15)',
-                              border: '2px solid rgba(59, 130, 246, 0.3)',
-                              minWidth: '180px',
-                              maxWidth: '250px',
-                            }}>
-                              <FileText size={20} color="#60a5fa" />
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ 
-                                  fontSize: '13px', 
-                                  fontWeight: '600', 
-                                  color: '#f3f4f6',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}>
-                                  {att.name || 'Document.pdf'}
-                                </div>
-                                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)' }}>
-                                  PDF Document
+                  <div
+                    key={msg.id}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                      maxWidth: '900px', width: '100%', margin: '0 auto',
+                      gap: 6,
+                      animation: 'sa-fade-in .18s ease',
+                      position: 'relative',
+                    }}
+                    onMouseEnter={() => msg.role === 'user' && setHoveredMessageId(msg.id)}
+                    onMouseLeave={() => msg.role === 'user' && setHoveredMessageId(null)}
+                  >
+                    <div style={msg.role === 'user' ? {
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      border: `1px solid ${theme.colors.border}`,
+                      borderRadius: 16,
+                      padding: '0px 16px',
+                      maxWidth: '80%',
+                      position: 'relative',
+                    } : {
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      width: '100%',
+                      maxWidth: '100%',
+                      color: theme.colors.text,
+                      position: 'relative',
+                    }}>
+                      {/* Show attachments if present */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '8px',
+                          padding: '12px 0',
+                          paddingTop: msg.role === 'user' ? '12px' : '0',
+                        }}>
+                          {msg.attachments.map((att, idx) => (
+                            att.type === 'image' ? (
+                              <div key={idx} style={{
+                                position: 'relative',
+                                width: '120px',
+                                height: '120px',
+                                borderRadius: '12px',
+                                overflow: 'hidden',
+                                border: '2px solid rgba(99, 102, 241, 0.3)',
+                                background: 'rgba(0, 0, 0, 0.3)',
+                                cursor: 'pointer',
+                              }}
+                                onClick={() => window.open(att.dataUrl, '_blank')}
+                              >
+                                <img
+                                  src={att.dataUrl}
+                                  alt={`Attachment ${idx + 1}`}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover'
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div key={idx} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '10px 14px',
+                                borderRadius: '10px',
+                                background: 'rgba(59, 130, 246, 0.15)',
+                                border: '2px solid rgba(59, 130, 246, 0.3)',
+                                minWidth: '180px',
+                                maxWidth: '250px',
+                              }}>
+                                <FileText size={20} color="#60a5fa" />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    color: '#f3f4f6',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}>
+                                    {att.name || 'Document.pdf'}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                    PDF Document
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )
-                        ))}
+                            )
+                          ))}
+                        </div>
+                      )}
+                      {renderMessageContent(msg.content)}
+                    </div>
+
+                    {/* Action buttons */}
+                    {showActions && (
+                      <div style={{
+                        display: 'flex',
+                        gap: '4px',
+                        marginTop: '4px',
+                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                      }}>
+                        {msg.role === 'user' ? (
+                          <>
+                            {/* Copy button for user messages - icon only */}
+                            <button
+                              onClick={() => handleCopyMessage(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}
+                              title="Copy"
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '8px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'rgba(255,255,255,0.5)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'color 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
+                            >
+                              <Copy size={14} />
+                            </button>
+                            {/* Edit button for user messages - icon only */}
+                            <button
+                              onClick={() => handleEditMessage(msg.id)}
+                              title="Edit"
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '8px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'rgba(255,255,255,0.5)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'color 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* Copy button for assistant messages - with background */}
+                            <button
+                              onClick={() => handleCopyMessage(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}
+                              title="Copy"
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: '8px',
+                                background: 'rgba(255,255,255,0.06)',
+                                border: `1px solid ${theme.colors.border}`,
+                                color: theme.colors.text,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                fontSize: '13px',
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                            >
+                              <Copy size={14} />
+                              <span>Copy</span>
+                            </button>
+                            {/* Regenerate button for assistant messages - with background */}
+                            <button
+                              onClick={() => handleRegenerateResponse(msg.id)}
+                              title="Regenerate"
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: '8px',
+                                background: 'rgba(255,255,255,0.06)',
+                                border: `1px solid ${theme.colors.border}`,
+                                color: theme.colors.text,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                fontSize: '13px',
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                            >
+                              <RefreshCw size={14} />
+                              <span>Regenerate</span>
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
-                    {renderMessageContent(msg.content)}
                   </div>
-                  
-                  {/* Action buttons */}
-                  {showActions && (
-                    <div style={{
-                      display: 'flex',
-                      gap: '4px',
-                      marginTop: '4px',
-                      alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    }}>
-                      {msg.role === 'user' ? (
-                        <>
-                          {/* Copy button for user messages - icon only */}
-                          <button
-                            onClick={() => handleCopyMessage(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}
-                            title="Copy"
-                            style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '8px',
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'rgba(255,255,255,0.5)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'color 0.15s',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
-                            onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
-                          >
-                            <Copy size={14} />
-                          </button>
-                          {/* Edit button for user messages - icon only */}
-                          <button
-                            onClick={() => handleEditMessage(msg.id)}
-                            title="Edit"
-                            style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '8px',
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'rgba(255,255,255,0.5)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'color 0.15s',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
-                            onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          {/* Copy button for assistant messages - with background */}
-                          <button
-                            onClick={() => handleCopyMessage(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}
-                            title="Copy"
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: '8px',
-                              background: 'rgba(255,255,255,0.06)',
-                              border: `1px solid ${theme.colors.border}`,
-                              color: theme.colors.text,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '6px',
-                              fontSize: '13px',
-                              transition: 'background 0.15s',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
-                          >
-                            <Copy size={14} />
-                            <span>Copy</span>
-                          </button>
-                          {/* Regenerate button for assistant messages - with background */}
-                          <button
-                            onClick={() => handleRegenerateResponse(msg.id)}
-                            title="Regenerate"
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: '8px',
-                              background: 'rgba(255,255,255,0.06)',
-                              border: `1px solid ${theme.colors.border}`,
-                              color: theme.colors.text,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '6px',
-                              fontSize: '13px',
-                              transition: 'background 0.15s',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
-                          >
-                            <RefreshCw size={14} />
-                            <span>Regenerate</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
+                );
               })}
               {streamingText && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '900px', width: '100%', margin: '0 auto', gap: 10 }}>
@@ -2281,219 +2615,237 @@ export default function HomeScreen() {
         )}
 
         {/* Footer - Floating Input */}
-        <div style={{ 
-          position: 'absolute', 
+        <div style={{
+          position: 'absolute',
           left: 0, right: 0,
-          bottom: 0,
+          // When no messages: position at ~40% from top so it grows downward
+          // When messages exist: anchor at bottom
+          ...(messages.length === 0 ? {
+            top: '40%',
+            bottom: 'auto',
+          } : {
+            top: 'auto',
+            bottom: 0,
+          }),
           padding: '16px',
-          paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+          paddingBottom: messages.length === 0 ? '16px' : 'calc(16px + env(safe-area-inset-bottom, 0px))',
           background: 'transparent',
           pointerEvents: 'none', // allow messages to scroll beneath, inner card will enable interactions
+          transition: 'top 0.3s ease, bottom 0.3s ease',
         }}>
-          {/* Contextual prompts modal */}
-          {showContextualPrompts && selectedPromptType && selectedPromptType.contextual && selectedPromptType.contextual.length > 0 && (
-            <div
-              style={{
-                position: 'absolute',
-                left: '16px',
-                right: '16px',
-                bottom: '180px',
-                zIndex: 200,
-                maxWidth: '900px',
-                margin: '0 auto',
-                pointerEvents: 'auto',
-              }}
-            >
-              <div
-                style={{
-                  background: 'linear-gradient(180deg, rgba(30, 35, 42, 0.98), rgba(20, 24, 28, 0.98))',
-                  borderRadius: '20px',
-                  padding: '20px',
-                  border: `1px solid ${theme.colors.border}`,
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
-                  backdropFilter: 'blur(12px)',
-                }}
-              >
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between', 
-                  marginBottom: '16px' 
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {(() => {
-                      const IconComponent = getIconComponent(selectedPromptType.icon);
-                      return <IconComponent size={24} color={selectedPromptType.iconColor} />;
-                    })()}
-                    <span style={{ 
-                      color: theme.colors.text,
-                      fontSize: '18px',
-                      fontWeight: '700',
-                      fontFamily: 'SUSE, sans-serif'
-                    }}>
-                      {selectedPromptType.title}
-                    </span>
-                  </div>
-                  <button 
-                    onClick={clearContextualPrompts}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '12px',
-                      background: 'rgba(255,255,255,0.08)',
-                      border: 'none',
-                      color: '#9aa',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                <div style={{ 
-                  color: '#94a3b8',
-                  fontSize: '14px',
-                  marginBottom: '20px',
-                  fontFamily: 'SUSE, sans-serif',
-                  lineHeight: '20px',
-                }}>
-                  Choose a specific task to continue with:
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {selectedPromptType.contextual.slice(0, 4).map((contextualText: string, idx: number) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleContextualPromptClick(contextualText)}
-                      style={{
-                        background: 'rgba(255,255,255,0.08)',
-                        padding: '16px',
-                        borderRadius: '12px',
-                        border: `1px solid ${theme.colors.border}`,
-                        color: theme.colors.text,
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        lineHeight: '20px',
-                        fontFamily: 'SUSE, sans-serif',
-                        textAlign: 'left',
-                        transition: 'all 0.2s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
-                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
-                        e.currentTarget.style.borderColor = theme.colors.border;
-                      }}
-                    >
-                      {contextualText}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
-          <div style={{ maxWidth: '900px', margin: '0 auto', pointerEvents: 'auto' }}>
-            <div style={{ 
-              background: 'rgba(15, 15, 15, 0.95)',
-              border: `1.5px solid rgba(255,255,255,0.12)`,
-              borderRadius: '24px',
-              padding: '16px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
-            }}>
-              {/* Attachments preview area */}
-              {(attachedImages.length > 0 || attachedPDFs.length > 0) && (
-                <div style={{ 
-                  display: 'flex', 
-                  flexWrap: 'wrap', 
-                  gap: '8px', 
-                  padding: '8px', 
-                  marginBottom: '8px',
-                  borderRadius: '14px',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: `1px solid ${theme.colors.border}`,
-                }}>
-                  {attachedImages.map((img, index) => (
-                    <div key={index} style={{ 
-                      position: 'relative',
-                      width: '80px',
-                      height: '80px',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      border: `1px solid ${theme.colors.border}`,
-                      background: 'rgba(255, 255, 255, 0.02)',
-                    }}>
-                      <img 
-                        src={img.dataUrl} 
-                        alt={`Attachment ${index + 1}`}
-                        style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'cover' 
-                        }}
-                      />
+          <div style={{ maxWidth: '1040px', margin: '0 auto', pointerEvents: 'auto' }}>
+            {(() => {
+              // Use the isPillMode computed at component level
+              // Pill mode: horizontal layout (plus, auto, input, send)
+              // Rectangular mode: grid layout with controls below
+              if (isPillMode) {
+                return (
+                  <div style={{
+                    background: 'rgb(48, 48, 48)',
+                    border: '1px solid #444444',
+                    borderRadius: '50px',
+                    padding: '10px 16px',
+                    boxShadow: '0 0 10px rgba(0,0,0,0.2)',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}>
+                    {/* Attachment button */}
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input type="file" id="image-picker" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImagePick} />
+                      <input type="file" id="pdf-picker" accept=".pdf,application/pdf" multiple style={{ display: 'none' }} onChange={handlePDFPick} />
                       <button
-                        onClick={() => clearAttachment('image', index)}
+                        onClick={() => setShowAttachMenu(!showAttachMenu)}
+                        title="Attach files"
                         style={{
-                          position: 'absolute',
-                          top: '4px',
-                          right: '4px',
-                          width: '20px',
-                          height: '20px',
+                          width: '44px',
+                          height: '44px',
+                          background: 'transparent',
+                          border: 'none',
                           borderRadius: '50%',
-                          background: 'rgba(255,255,255,0.14)',
-                          border: `1px solid ${theme.colors.border}`,
-                          color: theme.colors.text,
+                          color: theme.colors.textSecondary,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: '12px',
-                          padding: 0,
+                          transition: 'all 0.2s ease',
+                          flexShrink: 0,
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
+                        onMouseLeave={(e) => e.currentTarget.style.color = theme.colors.textSecondary}
+                      >
+                        <Plus size={28} />
+                      </button>
+                      {/* Attachment menu */}
+                      {showAttachMenu && (
+                        <>
+                          <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setShowAttachMenu(false)} />
+                          <div style={{
+                            position: 'absolute', bottom: '55px', left: 0, minWidth: '220px',
+                            background: 'rgb(58, 58, 58)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px',
+                            padding: '10px', zIndex: 1500, boxShadow: '0 12px 48px rgba(0,0,0,0.6)'
+                          }}>
+                            <button onClick={() => { document.getElementById('image-picker')?.click(); setShowAttachMenu(false); }}
+                              style={{ width: '100%', padding: '12px 14px', background: 'transparent', border: 'none', color: theme.colors.text, textAlign: 'left', cursor: 'pointer', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '15px', fontWeight: 500 }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgb(74, 74, 74)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <ImageIcon size={20} /> Add Images
+                            </button>
+                            <button onClick={() => { document.getElementById('pdf-picker')?.click(); setShowAttachMenu(false); }}
+                              style={{ width: '100%', padding: '12px 14px', background: 'transparent', border: 'none', color: theme.colors.text, textAlign: 'left', cursor: 'pointer', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '15px', fontWeight: 500 }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgb(74, 74, 74)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <FileText size={20} /> Add PDFs
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Auto-switch toggle */}
+                    <button
+                      onClick={() => {
+                        const newValue = !autoSwitch;
+                        setAutoSwitch(newValue);
+                        setAutoSwitchEnabled(newValue);
+                      }}
+                      title={autoSwitch ? "Auto-switch: ON" : "Auto-switch: OFF"}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', height: '44px',
+                        background: 'transparent', border: 'none', borderRadius: '22px',
+                        color: autoSwitch ? '#10b981' : theme.colors.textSecondary,
+                        fontSize: 16, cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s ease',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Zap size={22} fill={autoSwitch ? '#10b981' : 'none'} />
+                      <span>Auto</span>
+                    </button>
+
+                    {/* Textarea - grows to fill space */}
+                    <textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setInput(newValue);
+                        // In pill mode, check if we need to switch to rectangular
+                        // Only switch if there's a newline or text is very long
+                        if (newValue.includes('\n')) {
+                          setInputHeight(50); // Force switch to rectangular
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      placeholder="Ask anything"
+                      disabled={sending}
+                      rows={1}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        height: '61px',
+                        minHeight: '61px',
+                        maxHeight: '61px',
+                        padding: '0 14px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#fff',
+                        fontSize: '18px',
+                        fontFamily: 'Varela Round, sans-serif',
+                        resize: 'none',
+                        outline: 'none',
+                        lineHeight: '61px',
+                        overflow: 'hidden',
+                      }}
+                    />
+
+                    {/* Send button */}
+                    {sending ? (
+                      <button onClick={handleStopGeneration} style={{
+                        width: '61px', height: '61px', borderRadius: '50%', background: theme.colors.text, border: 'none',
+                        color: theme.colors.background, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                        flexShrink: 0,
+                      }}>
+                        <Square size={18} fill="currentColor" />
+                      </button>
+                    ) : (
+                      <button onClick={handleSend} disabled={!input.trim()} style={{
+                        width: '61px', height: '61px', borderRadius: '50%',
+                        background: input.trim() ? '#fff' : 'rgba(255,255,255,0.1)',
+                        border: 'none',
+                        color: input.trim() ? '#000' : 'rgba(255,255,255,0.4)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'not-allowed',
+                        transition: 'all 0.2s ease',
+                        flexShrink: 0,
+                      }}>
+                        <ArrowUp size={22} strokeWidth={3} />
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              // Rectangular mode - multiline input
+              return (
+            <div style={{
+              background: 'rgb(48, 48, 48)',
+              border: '1px solid #444444',
+              borderRadius: '16px',
+              padding: '12px',
+              boxShadow: '0 0 10px rgba(0,0,0,0.2)',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}>
+              {/* Attachments preview area */}
+              {(attachedImages.length > 0 || attachedPDFs.length > 0) && (
+                <div style={{
+                  display: 'flex',
+                  gap: '10px',
+                  overflowX: 'auto',
+                  paddingBottom: '8px',
+                }}>
+                  {attachedImages.map((img, index) => (
+                    <div key={index} style={{ position: 'relative', width: '60px', height: '60px', flexShrink: 0 }}>
+                      <img src={img.dataUrl} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${theme.colors.border}` }} />
+                      <button
+                        onClick={() => clearAttachment('image', index)}
+                        style={{
+                          position: 'absolute', top: -6, right: -6, width: '20px', height: '20px', borderRadius: '50%',
+                          background: 'rgba(0,0,0,0.8)', border: `1px solid ${theme.colors.border}`, color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
                         }}
                       >
-                        <X size={14} />
+                        <X size={12} />
                       </button>
                     </div>
                   ))}
                   {attachedPDFs.map((pdf, index) => (
-                    <div key={`pdf-${index}`} style={{ 
-                      position: 'relative',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '12px',
-                      borderRadius: '12px',
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: `1px solid ${theme.colors.border}`,
-                      minWidth: '200px',
-                      maxWidth: '280px',
+                    <div key={index} style={{
+                      position: 'relative', width: '160px', height: '60px', flexShrink: 0,
+                      background: 'rgba(255,255,255,0.05)', border: `1px solid ${theme.colors.border}`, borderRadius: '8px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '0 8px'
                     }}>
-                      <FileText size={24} color="#60a5fa" />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ 
-                          fontSize: '13px', 
-                          fontWeight: '600', 
-                          color: '#f3f4f6',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                        <FileText size={16} color={theme.colors.textSecondary} />
+                        <div style={{ fontSize: '12px', color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {pdf.name}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)' }}>
-                          PDF Document
                         </div>
                       </div>
                       <button
                         onClick={() => clearAttachment('pdf', index)}
                         style={{
-                          width: '24px',
-                          height: '24px',
-                          borderRadius: '50%',
+                          position: 'absolute', top: -6, right: -6, width: '20px', height: '20px', borderRadius: '50%',
                           background: 'rgba(255,255,255,0.14)',
                           border: `1px solid ${theme.colors.border}`,
                           color: theme.colors.text,
@@ -2504,457 +2856,213 @@ export default function HomeScreen() {
                           padding: 0,
                         }}
                       >
-                        <X size={16} />
+                        <X size={12} />
                       </button>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Textarea first (borderless, same as card bg) */}
-              <div style={{ borderRadius: '12px', marginBottom: '10px' }}>
-                <textarea 
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => {
-                    setInput(e.target.value);
-                    const ta = e.currentTarget;
-                    ta.style.height = 'auto';
-                    ta.style.height = Math.min(160, Math.max(52, ta.scrollHeight)) + 'px';
-                  }} 
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder="Ask Anything..." disabled={sending}
-                  style={{
-                    width: '100%', minHeight: '52px', maxHeight: '160px', padding: '12px 14px',
-                    background: 'transparent', border: 'none', color: '#fff', fontSize: '16px', fontFamily: 'SUSE, sans-serif', resize: 'none', outline: 'none',
-                  }}
-                />
-              </div>
+              {/* Textarea */}
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setInput(newValue);
+                  const ta = e.currentTarget;
+                  ta.style.height = 'auto';
+                  const scrollH = ta.scrollHeight;
+                  const newHeight = Math.min(160, Math.max(38, scrollH));
+                  ta.style.height = newHeight + 'px';
+                  
+                  // Switch back to pill mode if there are no newlines
+                  // The pill textarea will handle overflow with text-overflow
+                  if (!newValue.includes('\n')) {
+                    setInputHeight(40); // Reset to pill mode
+                  } else {
+                    setInputHeight(newHeight);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Ask anything"
+                disabled={sending}
+                style={{
+                  width: '100%',
+                  minHeight: '38px',
+                  maxHeight: '160px',
+                  padding: '8px 0',
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: '16px',
+                  fontFamily: 'Varela Round, sans-serif',
+                  resize: 'none',
+                  outline: 'none',
+                  lineHeight: '1.5',
+                }}
+              />
 
-              {/* Controls row: paperclip, model, reasoning, send/stop */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {/* Attachment button with menu */}
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="file"
-                    id="image-picker"
-                    accept="image/*"
-                    multiple
-                    style={{ display: 'none' }}
-                    onChange={handleImagePick}
-                  />
-                  <input
-                    type="file"
-                    id="pdf-picker"
-                    accept=".pdf,application/pdf"
-                    multiple
-                    style={{ display: 'none' }}
-                    onChange={handlePDFPick}
-                  />
-                  <button 
-                    onClick={() => setShowAttachMenu(!showAttachMenu)}
-                    title="Attach files" 
-                    style={{
-                      width: '40px', 
-                      height: '40px', 
-                      background: 'rgba(255,255,255,0.08)', 
-                      border: `1.5px solid rgba(255,255,255,0.12)`,
-                      borderRadius: '12px', 
-                      color: theme.colors.text, 
-                      cursor: 'pointer', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      position: 'relative',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <Paperclip size={18} />
-                    {(attachedImages.length > 0 || attachedPDFs.length > 0) && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '-4px',
-                        right: '-4px',
-                        width: '18px',
-                        height: '18px',
+              {/* Bottom Controls Row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                {/* Left Controls: Attachment & Auto */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {/* Attachment button with menu */}
+                  <div style={{ position: 'relative' }}>
+                    <input type="file" id="image-picker-rect" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImagePick} />
+                    <input type="file" id="pdf-picker-rect" accept=".pdf,application/pdf" multiple style={{ display: 'none' }} onChange={handlePDFPick} />
+                    <button
+                      onClick={() => setShowAttachMenu(!showAttachMenu)}
+                      title="Attach files"
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        background: 'transparent',
+                        border: 'none',
                         borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.14)',
-                        color: theme.colors.text,
-                        fontSize: '10px',
-                        fontWeight: '700',
+                        color: theme.colors.textSecondary,
+                        cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                      }}>
-                        {attachedImages.length + attachedPDFs.length}
-                      </div>
-                    )}
-                  </button>
-
-                  {/* Attachment menu */}
-                  {showAttachMenu && (
-                    <>
-                      <div 
-                        style={{ position: 'fixed', inset: 0, zIndex: 998 }} 
-                        onClick={() => setShowAttachMenu(false)} 
-                      />
-                      <div style={{
-                        position: 'absolute',
-                        bottom: '48px',
-                        left: 0,
-                        minWidth: '240px',
-                        background: 'rgba(15, 15, 15, 0.98)',
-                        border: `1.5px solid rgba(255,255,255,0.15)`,
-                        borderRadius: '18px',
-                        padding: '12px',
-                        zIndex: 1500,
-                        boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)',
-                      }}>
-                        <div style={{
-                          padding: '6px 8px 10px',
-                          borderBottom: `1px solid ${theme.colors.border}`,
-                          marginBottom: '8px',
-                          color: theme.colors.text,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          letterSpacing: '.05em',
-                          textTransform: 'uppercase'
-                        }}>Attach files</div>
-                        <button
-                          onClick={() => {
-                            document.getElementById('image-picker')?.click();
-                            setShowAttachMenu(false);
-                          }}
-                          disabled={attachedImages.length >= 5}
-                          style={{
-                            width: '100%',
-                            padding: '10px 12px',
-                            background: 'transparent',
-                            border: 'none',
-                            color: attachedImages.length >= 5 ? 'rgba(255, 255, 255, 0.3)' : theme.colors.text,
-                            textAlign: 'left',
-                            cursor: attachedImages.length >= 5 ? 'not-allowed' : 'pointer',
-                            borderRadius: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            fontSize: '14px',
-                            transition: 'background 0.15s',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (attachedImages.length < 5) {
-                              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <ImageIcon size={18} />
-                          <div>
-                            <div>Add Images</div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)' }}>
-                              {attachedImages.length}/5 attached
-                            </div>
-                          </div>
-                        </button>
-                        <button
-                          onClick={() => {
-                            document.getElementById('pdf-picker')?.click();
-                            setShowAttachMenu(false);
-                          }}
-                          disabled={attachedPDFs.length >= 5}
-                          style={{
-                            width: '100%',
-                            padding: '10px 12px',
-                            background: 'transparent',
-                            border: 'none',
-                            color: attachedPDFs.length >= 5 ? 'rgba(255, 255, 255, 0.3)' : theme.colors.text,
-                            textAlign: 'left',
-                            cursor: attachedPDFs.length >= 5 ? 'not-allowed' : 'pointer',
-                            borderRadius: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            fontSize: '14px',
-                            transition: 'background 0.15s',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (attachedPDFs.length < 5) {
-                              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <FileText size={18} />
-                          <div>
-                            <div>Add PDFs</div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)' }}>
-                              {attachedPDFs.length}/5 attached
-                            </div>
-                          </div>
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div style={{ position: 'relative' }}>
-                  <button onClick={() => setShowModelPicker(!showModelPicker)} style={{
-                    display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px',
-                    background: 'rgba(255, 255, 255, 0.08)', border: `1.5px solid rgba(255,255,255,0.12)`,
-                    borderRadius: '14px', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', maxWidth: '260px',
-                    transition: 'all 0.2s ease',
-                  }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {selectedModelObj?.label || 'Select Model'}
-                    </span>
-                    <ChevronDown size={12} />
-                  </button>
-
-                  {showModelPicker && (
-                    <>
-                      <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowModelPicker(false)} />
-                      <div style={{ position: 'absolute', bottom: '48px', left: 0, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: 'rgba(15, 15, 15, 0.98)', border: `1.5px solid rgba(255,255,255,0.15)`, borderRadius: '20px', padding: '14px', zIndex: 1500, boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)' }}>
-                        <div style={{ padding: '12px 8px 12px', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: '12px' }}>
-                          <div style={{ fontSize: '18px', fontWeight: '700', color: theme.colors.text, marginBottom: '6px', letterSpacing: '-0.02em' }}>Choose Model</div>
-                          <div style={{ fontSize: '13px', color: theme.colors.textSecondary }}>{models.length} models available</div>
-                        </div>
-                        {(() => {
-                          const favoritesSet = new Set(favoriteModels);
-                          const byProvider = (prov: string) => models.filter(m => (m.inference || 'groq').toLowerCase() === prov.toLowerCase());
-                          const favorites = models.filter(m => favoritesSet.has(m.id));
-                          const groq = byProvider('groq');
-                          const cerebras = byProvider('cerebras');
-                          const openrouter = byProvider('openrouter');
-
-                          const Card = ({ model }: { model: CatalogEntry }) => {
-                            const inferenceName = model.inference || 'groq';
-                            const inferenceDisplay = inferenceName.charAt(0).toUpperCase() + inferenceName.slice(1);
-                            const inferenceColors: Record<string, { bg: string; text: string }> = {
-                              groq: { bg: 'rgba(249, 115, 22, 0.15)', text: '#fb923c' },
-                              mistral: { bg: 'rgba(139, 92, 246, 0.15)', text: '#a78bfa' },
-                              cerebras: { bg: 'rgba(236, 72, 153, 0.15)', text: '#f472b6' },
-                              openrouter: { bg: 'rgba(59, 130, 246, 0.15)', text: '#60a5fa' },
-                              google: { bg: 'rgba(34, 197, 94, 0.15)', text: '#4ade80' },
-                            };
-                            const inferenceStyle = inferenceColors[inferenceName.toLowerCase()] || inferenceColors.groq;
-                            const isFav = favoritesSet.has(model.id);
-                            return (
-                              <div
-                                onClick={() => handleModelSelect(model.id)}
-                                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 12px', borderRadius: '12px', cursor: 'pointer', background: selectedModel === model.id ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)', border: selectedModel === model.id ? '1.5px solid rgba(255,255,255,0.16)' : '1px solid rgba(255,255,255,0.06)', transition: 'background 0.15s ease, border-color 0.15s ease' }}
-                                onMouseEnter={(e) => { if (selectedModel !== model.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; } }}
-                                onMouseLeave={(e) => { if (selectedModel !== model.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; } }}
-                              >
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: '14px', fontWeight: '600', color: theme.colors.text, marginBottom: '8px', lineHeight: '1.3' }}>{model.label}</div>
-                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '11px', fontWeight: '600', padding: '4px 8px', borderRadius: '8px', background: inferenceStyle.bg, color: inferenceStyle.text, border: `1px solid ${inferenceStyle.text}33`, textTransform: 'capitalize', letterSpacing: '0.02em' }}>⚡ {inferenceDisplay}</span>
-                                    <span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.12)', background: 'rgba(255, 255, 255, 0.05)', color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{model.type}</span>
-                                    <span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.2)' }}>{model.provider || getProviderName(model.id)}</span>
-                                    {model.hasReasoning && (<span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa', border: '1px solid rgba(168, 85, 247, 0.25)' }}>💡 Reasoning</span>)}
-                                    {model.supportsVision && (<span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.25)' }}>👁️ Vision</span>)}
-                                  </div>
-                                </div>
-                                <button onClick={(e) => { e.stopPropagation(); toggleFavoriteModel(model.id); }} title={isFav ? 'Remove from favorites' : 'Add to favorites'} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: isFav ? '#facc15' : theme.colors.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
-                                  <Star size={16} fill={isFav ? '#facc15' : 'transparent'} />
-                                </button>
-                                {selectedModel === model.id && (
-                                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                    <Check size={12} color="#fff" strokeWidth={3} />
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          };
-
-                          const Section = ({ title, items }: { title: string; items: CatalogEntry[] }) => (
-                            items.length === 0 ? null : (
-                              <div style={{ marginBottom: 12 }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '.05em', margin: '8px 4px' }}>{title}</div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                  {items.map(m => <Card key={m.id} model={m} />)}
-                                </div>
-                              </div>
-                            )
-                          );
-
-                          const favoritesSorted = models.filter(m => favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                          const groqSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'groq' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                          const cerebrasSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'cerebras' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                          const mistralSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'mistral' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                          const googleSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'google' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                          const openrouterSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'openrouter' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-
-                          return (
-                            <>
-                              <Section title="Favorites" items={favoritesSorted} />
-                              <Section title="Groq" items={groqSorted} />
-                              <Section title="Cerebras" items={cerebrasSorted} />
-                              <Section title="Mistral" items={mistralSorted} />
-                              <Section title="Google" items={googleSorted} />
-                              <Section title="OpenRouter" items={openrouterSorted} />
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Auto-switch toggle */}
-                <button 
-                  onClick={() => {
-                    const newValue = !autoSwitch;
-                    setAutoSwitch(newValue);
-                    setAutoSwitchEnabled(newValue);
-                  }} 
-                  title={autoSwitch ? "Auto-switch: ON" : "Auto-switch: OFF"}
-                  style={{
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    gap: 6, 
-                    padding: '10px 12px',
-                    background: autoSwitch ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255,255,255,0.06)', 
-                    border: `1px solid ${autoSwitch ? 'rgba(16, 185, 129, 0.3)' : theme.colors.border}`,
-                    borderRadius: '999px', 
-                    color: autoSwitch ? '#10b981' : '#94a3b8', 
-                    fontSize: 12, 
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    fontWeight: 600,
-                  }}
-                >
-                  <Zap size={14} strokeWidth={2.5} fill={autoSwitch ? '#10b981' : 'none'} />
-                  <span>Auto</span>
-                </button>
-
-                {isReasoningSelected && (
-                  <div style={{ position: 'relative' }}>
-                    <button onClick={() => setShowReasoningMenu(v => !v)} title="Reasoning level"
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-                        background: 'rgba(255,255,255,0.06)', border: `1px solid ${theme.colors.border}`,
-                        borderRadius: '999px', color: theme.colors.text, fontSize: 12, cursor: 'pointer'
-                      }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 999, background: theme.colors.primary, display: 'inline-block' }} />
-                      <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{reasoningLevel}</span>
-                      <ChevronDown size={14} />
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
+                      onMouseLeave={(e) => e.currentTarget.style.color = theme.colors.textSecondary}
+                    >
+                      <Plus size={24} />
                     </button>
-                    {showReasoningMenu && (
+                    {/* Attachment menu */}
+                    {showAttachMenu && (
                       <>
-                        <div style={{ position: 'fixed', inset: 0, zIndex: 1499 }} onClick={() => setShowReasoningMenu(false)} />
-                        <div style={{ position: 'absolute', bottom: '44px', left: 0, background: theme.colors.surfaceAlt, border: `1px solid ${theme.colors.border}`, borderRadius: 14, padding: 10, minWidth: 200, zIndex: 1500 }}>
-                          <div style={{ padding: '2px 4px 8px', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: 8, color: theme.colors.textSecondary, fontSize: 12, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase' }}>Reasoning</div>
-                          {(['low','medium','high'] as const).map(lvl => (
-                            <div key={lvl} onClick={() => setReasoning(lvl)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', background: reasoningLevel===lvl? 'rgba(255,255,255,0.06)':'transparent' }}>
-                              <span style={{ textTransform: 'capitalize' }}>{lvl}</span>
-                              {reasoningLevel===lvl && <Check size={14} />}
-                            </div>
-                          ))}
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setShowAttachMenu(false)} />
+                        <div style={{
+                          position: 'absolute', bottom: '48px', left: 0, minWidth: '200px',
+                          background: '#2a2a2a', border: `1px solid ${theme.colors.border}`, borderRadius: '12px',
+                          padding: '8px', zIndex: 1500, boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+                        }}>
+                          <button onClick={() => { document.getElementById('image-picker-rect')?.click(); setShowAttachMenu(false); }}
+                            style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', color: theme.colors.text, textAlign: 'left', cursor: 'pointer', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <ImageIcon size={18} /> Add Images
+                          </button>
+                          <button onClick={() => { document.getElementById('pdf-picker-rect')?.click(); setShowAttachMenu(false); }}
+                            style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', color: theme.colors.text, textAlign: 'left', cursor: 'pointer', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <FileText size={18} /> Add PDFs
+                          </button>
                         </div>
                       </>
                     )}
                   </div>
-                )}
 
-                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+                  {/* Auto-switch toggle */}
+                  <button
+                    onClick={() => {
+                      const newValue = !autoSwitch;
+                      setAutoSwitch(newValue);
+                      setAutoSwitchEnabled(newValue);
+                    }}
+                    title={autoSwitch ? "Auto-switch: ON" : "Auto-switch: OFF"}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 4, padding: '0 12px', height: '38px',
+                      background: 'transparent', border: 'none', borderRadius: '19px',
+                      color: autoSwitch ? '#10b981' : theme.colors.textSecondary,
+                      fontSize: 13, cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <Zap size={16} fill={autoSwitch ? '#10b981' : 'none'} />
+                    <span>Auto</span>
+                  </button>
+                </div>
+
+                {/* Right Controls: Reasoning & Send */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {isReasoningSelected && (
+                    <button onClick={() => setShowReasoningMenu(v => !v)} title="Reasoning level"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', height: '38px',
+                        background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '19px',
+                        color: theme.colors.textSecondary, fontSize: 12, cursor: 'pointer'
+                      }}>
+                      <span style={{ width: 6, height: 6, borderRadius: 999, background: theme.colors.primary, display: 'inline-block' }} />
+                      <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{reasoningLevel}</span>
+                    </button>
+                  )}
+
                   {sending ? (
                     <button onClick={handleStopGeneration} style={{
-                      minWidth: '75px', height: '35px', paddingLeft: '18px', paddingRight: '18px',
-                      background: 'transparent', border: `1px solid ${theme.colors.border}`, borderRadius: '22px', color: theme.colors.text,
-                      fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontWeight: '700', marginTop: '2px', fontFamily: 'SUSE, sans-serif',
-                      transition: 'background 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                    ><Square size={18} strokeWidth={3} /></button>
+                      width: '38px', height: '38px', borderRadius: '50%', background: theme.colors.text, border: 'none',
+                      color: theme.colors.background, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                    }}>
+                      <Square size={14} fill="currentColor" />
+                    </button>
                   ) : (
                     <button onClick={handleSend} disabled={!input.trim()} style={{
-                      minWidth: '42px',
-                      height: '42px',
-                      paddingLeft: '0',
-                      paddingRight: '0',
-                      background: input.trim() ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255,255,255,0.06)',
-                      border: `1.5px solid ${input.trim() ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.12)'}`,
-                      borderRadius: '50%',
-                      color: input.trim() ? '#ffffff' : theme.colors.textSecondary,
-                      cursor: input.trim() ? 'pointer' : 'not-allowed',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '15px',
-                      fontWeight: '700',
-                      marginTop: '0',
-                      opacity: input.trim() ? 1 : 0.5,
-                      fontFamily: 'SUSE, sans-serif',
-                      transition: 'all 0.2s ease',
-                      boxShadow: input.trim() ? '0 4px 16px rgba(16, 185, 129, 0.3)' : 'none',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (input.trim()) {
-                        e.currentTarget.style.transform = 'scale(1.05)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (input.trim()) {
-                        e.currentTarget.style.transform = 'scale(1)';
-                        e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.3)';
-                      }
-                    }}
-                  ><ArrowUp size={20} strokeWidth={3} /></button>
+                      width: '38px', height: '38px', borderRadius: '50%',
+                      background: input.trim() ? '#fff' : 'rgba(255,255,255,0.1)',
+                      border: 'none',
+                      color: input.trim() ? '#000' : 'rgba(255,255,255,0.4)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'not-allowed',
+                      transition: 'all 0.2s ease'
+                    }}>
+                      <ArrowUp size={18} strokeWidth={3} />
+                    </button>
                   )}
                 </div>
               </div>
             </div>
+              );
+            })()}
           </div>
         </div>
       </div>
 
       {/* Rename Chat Modal */}
-      {renameOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000 }}>
-          <div onClick={closeRenameModal} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }} />
-          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(520px, 92vw)' }}>
-            <div style={{ background: 'rgba(20,22,28,0.98)', border: `1px solid ${theme.colors.border}`, borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
-              <div style={{ padding: 16, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontWeight: 800, color: theme.colors.text }}>Rename Chat</div>
-                <button onClick={closeRenameModal} title="Close" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: theme.colors.text, cursor: 'pointer' }}>×</button>
-              </div>
-              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <label style={{ fontSize: 12, color: theme.colors.textMuted, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase' }}>Title</label>
-                <input
-                  value={renameTitle}
-                  onChange={(e) => setRenameTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && (renameTitle || '').trim()) saveRename(); }}
-                  placeholder="Enter a chat title"
-                  style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.04)', color: theme.colors.text, outline: 'none' }}
-                />
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 8, alignItems: 'center' }}>
-                  <button onClick={generateTitleWithAI} disabled={renameBusy} title="Generate with AI" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: theme.colors.text, cursor: renameBusy ? 'not-allowed' : 'pointer', opacity: renameBusy ? 0.6 : 1 }}>
-                    <Wand2 size={16} />
-                    <span>{renameBusy ? 'Generating…' : 'Generate with AI'}</span>
-                  </button>
-                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
-                    <button onClick={closeRenameModal} style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${theme.colors.border}`, background: 'transparent', color: theme.colors.text, cursor: 'pointer' }}>Cancel</button>
-                    <button onClick={saveRename} disabled={!renameTitle.trim()} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: renameTitle.trim() ? theme.colors.primary : 'rgba(255,255,255,0.1)', color: renameTitle.trim() ? '#000' : '#999', cursor: renameTitle.trim() ? 'pointer' : 'not-allowed' }}>Save</button>
+      {
+        renameOpen && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 2000 }}>
+            <div onClick={closeRenameModal} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }} />
+            <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(520px, 92vw)' }}>
+              <div style={{ background: 'rgba(20,22,28,0.98)', border: `1px solid ${theme.colors.border}`, borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+                <div style={{ padding: 16, borderBottom: `1px solid ${theme.colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontWeight: 800, color: theme.colors.text }}>Rename Chat</div>
+                  <button onClick={closeRenameModal} title="Close" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: theme.colors.text, cursor: 'pointer' }}>×</button>
+                </div>
+                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <label style={{ fontSize: 12, color: theme.colors.textMuted, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase' }}>Title</label>
+                  <input
+                    value={renameTitle}
+                    onChange={(e) => setRenameTitle(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && (renameTitle || '').trim()) saveRename(); }}
+                    placeholder="Enter a chat title"
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.04)', color: theme.colors.text, outline: 'none' }}
+                  />
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 8, alignItems: 'center' }}>
+                    <button onClick={generateTitleWithAI} disabled={renameBusy} title="Generate with AI" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: theme.colors.text, cursor: renameBusy ? 'not-allowed' : 'pointer', opacity: renameBusy ? 0.6 : 1 }}>
+                      <Wand2 size={16} />
+                      <span>{renameBusy ? 'Generating…' : 'Generate with AI'}</span>
+                    </button>
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+                      <button onClick={closeRenameModal} style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${theme.colors.border}`, background: 'transparent', color: theme.colors.text, cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={saveRename} disabled={!renameTitle.trim()} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: renameTitle.trim() ? theme.colors.primary : 'rgba(255,255,255,0.1)', color: renameTitle.trim() ? '#000' : '#999', cursor: renameTitle.trim() ? 'pointer' : 'not-allowed' }}>Save</button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       <style>{`
         @keyframes pulse {
@@ -2967,170 +3075,1410 @@ export default function HomeScreen() {
       `}</style>
 
       {/* Mobile App QR Modal */}
-      {showMobileModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 3000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0, 0, 0, 0.7)',
-            backdropFilter: 'blur(4px)',
-          }}
-          onClick={() => setShowMobileModal(false)}
-        >
+      {
+        showMobileModal && (
           <div
-            onClick={(e) => e.stopPropagation()}
             style={{
-              background: `linear-gradient(180deg, ${theme.gradients.background.join(', ')})`,
-              borderRadius: 24,
-              padding: 32,
-              maxWidth: 400,
-              width: '90%',
-              border: `1px solid ${theme.colors.border}`,
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
-              position: 'relative',
+              position: 'fixed',
+              inset: 0,
+              zIndex: 3000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(4px)',
             }}
+            onClick={() => setShowMobileModal(false)}
           >
-            {/* Close button */}
-            <button
-              onClick={() => setShowMobileModal(false)}
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: '50%',
-                width: 32,
-                height: 32,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                color: theme.colors.text,
-              }}
-            >
-              <X size={18} />
-            </button>
-
-            {/* Title */}
-            <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <h2 style={{ fontSize: 24, fontWeight: 700, color: theme.colors.text, marginBottom: 8 }}>
-                Download Mobile App
-              </h2>
-              <p style={{ fontSize: 14, color: theme.colors.textSecondary }}>
-                Scan the QR code to download from Play Store
-              </p>
-            </div>
-
-            {/* QR Code Container */}
             <div
+              onClick={(e) => e.stopPropagation()}
               style={{
-                background: 'white',
-                borderRadius: 16,
-                padding: 24,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 16,
-                marginBottom: 24,
+                background: `linear-gradient(180deg, ${theme.gradients.background.join(', ')})`,
+                borderRadius: 24,
+                padding: 32,
+                maxWidth: 400,
+                width: '90%',
+                border: `1px solid ${theme.colors.border}`,
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+                position: 'relative',
               }}
             >
-              {/* QR Code with App Logo in Center */}
-              <div
+              {/* Close button */}
+              <button
+                onClick={() => setShowMobileModal(false)}
                 style={{
-                  position: 'relative',
-                  width: 256,
-                  height: 256,
+                  position: 'absolute',
+                  top: 16,
+                  right: 16,
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: `1px solid ${theme.colors.border}`,
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: theme.colors.text,
                 }}
               >
-                <QRCodeSVG
-                  value="https://play.google.com/store/apps/details?id=com.vivekgowdas.SwitchAi"
-                  size={256}
-                  level="H"
-                  includeMargin={false}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                  }}
-                />
-                {/* App Logo in Center */}
+                <X size={18} />
+              </button>
+
+              {/* Title */}
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <h2 style={{ fontSize: 24, fontWeight: 700, color: theme.colors.text, marginBottom: 8 }}>
+                  Download Mobile App
+                </h2>
+                <p style={{ fontSize: 14, color: theme.colors.textSecondary }}>
+                  Scan the QR code to download from Play Store
+                </p>
+              </div>
+
+              {/* QR Code Container */}
+              <div
+                style={{
+                  background: 'white',
+                  borderRadius: 16,
+                  padding: 24,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 16,
+                  marginBottom: 24,
+                }}
+              >
+                {/* QR Code with App Logo in Center */}
                 <div
                   style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: 64,
-                    height: 64,
-                    background: 'white',
-                    borderRadius: 12,
-                    padding: 4,
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                    position: 'relative',
+                    width: 256,
+                    height: 256,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
-                  <img
-                    src="/app.png"
-                    alt="SwitchAi"
+                  <QRCodeSVG
+                    value="https://play.google.com/store/apps/details?id=com.vivekgowdas.SwitchAi"
+                    size={256}
+                    level="H"
+                    includeMargin={false}
                     style={{
                       width: '100%',
                       height: '100%',
-                      borderRadius: 8,
-                      objectFit: 'contain',
                     }}
                   />
+                  {/* App Logo in Center */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: 64,
+                      height: 64,
+                      background: 'white',
+                      borderRadius: 12,
+                      padding: 4,
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                    }}
+                  >
+                    <img
+                      src="/app.png"
+                      alt="SwitchAi"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: 8,
+                        objectFit: 'contain',
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Play Store Button */}
-            <a
-              href="https://play.google.com/store/apps/details?id=com.vivekgowdas.SwitchAi"
-              target="_blank"
-              rel="noopener noreferrer"
+              {/* Play Store Button */}
+              <a
+                href="https://play.google.com/store/apps/details?id=com.vivekgowdas.SwitchAi"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 12,
+                  padding: '14px 24px',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  border: 'none',
+                  borderRadius: 12,
+                  color: 'white',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textDecoration: 'none',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  boxShadow: '0 4px 16px rgba(16, 185, 129, 0.3)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.3)';
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12L3.84 21.85C3.34 21.6 3 21.09 3 20.5Z" fill="currentColor" />
+                  <path d="M16.81 15.12L6.05 21.34L14.54 12.85L16.81 15.12Z" fill="currentColor" />
+                  <path d="M20.16 10.81C20.5 11.08 20.75 11.5 20.75 12C20.75 12.5 20.53 12.9 20.18 13.18L17.89 14.5L15.39 12L17.89 9.5L20.16 10.81Z" fill="currentColor" />
+                  <path d="M6.05 2.66L16.81 8.88L14.54 11.15L6.05 2.66Z" fill="currentColor" />
+                </svg>
+                <span>Get it on Play Store</span>
+              </a>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Settings Modal */}
+      {
+        showSettingsModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 3000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(3px)',
+              animation: 'sa-fade-in 0.2s ease',
+            }}
+            onClick={() => {
+              setShowSettingsModal(false);
+              setSelectedSettingsPage('overview');
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
               style={{
+                position: 'relative',
+                width: isMobile ? '92vw' : 'max(50vw, 800px)',
+                maxWidth: '95vw',
+                height: '70vh',
+                background: 'rgba(10, 10, 10, 0.98)',
+                borderRadius: 20,
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)',
+                overflow: 'hidden',
+                animation: 'sa-pop 0.3s ease',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 12,
-                padding: '14px 24px',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                border: 'none',
-                borderRadius: 12,
-                color: 'white',
-                fontSize: 16,
-                fontWeight: 600,
-                cursor: 'pointer',
-                textDecoration: 'none',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                boxShadow: '0 4px 16px rgba(16, 185, 129, 0.3)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.02)';
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.3)';
+                flexDirection: 'row',
               }}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12L3.84 21.85C3.34 21.6 3 21.09 3 20.5Z" fill="currentColor"/>
-                <path d="M16.81 15.12L6.05 21.34L14.54 12.85L16.81 15.12Z" fill="currentColor"/>
-                <path d="M20.16 10.81C20.5 11.08 20.75 11.5 20.75 12C20.75 12.5 20.53 12.9 20.18 13.18L17.89 14.5L15.39 12L17.89 9.5L20.16 10.81Z" fill="currentColor"/>
-                <path d="M6.05 2.66L16.81 8.88L14.54 11.15L6.05 2.66Z" fill="currentColor"/>
-              </svg>
-              <span>Get it on Play Store</span>
-            </a>
+              {/* Geometric decorative elements */}
+              <div style={{
+                position: 'absolute',
+                width: 180,
+                height: 180,
+                borderRadius: 90,
+                border: '1px solid rgba(255, 255, 255, 0.04)',
+                top: '-10%',
+                right: '-10%',
+                pointerEvents: 'none',
+                zIndex: 0,
+              }} />
+
+              {/* Left Sidebar - 33% */}
+              <div style={{
+                width: isMobile ? '100%' : '33%',
+                background: 'rgba(0, 0, 0, 0.4)',
+                borderRight: isMobile ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                position: 'relative',
+                zIndex: 1,
+              }}>
+                {/* Sidebar Header */}
+                <div style={{
+                  padding: '20px',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent)',
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 16,
+                  }}>
+                    <h2 style={{
+                      color: '#e5e7eb',
+                      fontSize: 18,
+                      fontWeight: 800,
+                      margin: 0,
+                      letterSpacing: '0.3px',
+                    }}>
+                      Settings
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setShowSettingsModal(false);
+                        setSelectedSettingsPage('overview');
+                      }}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: '#fff',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {/* Profile Card */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    borderRadius: 12,
+                    padding: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                  }}>
+                    <div style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      background: '#1f2937',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      flexShrink: 0,
+                    }}>
+                      {user?.photoURL && !avatarError ? (
+                        <img
+                          src={user.photoURL}
+                          alt={user?.displayName || 'User'}
+                          onError={() => setAvatarError(true)}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <span style={{ color: '#e5e7eb', fontWeight: 800, fontSize: 14 }}>
+                          {(user?.displayName || 'U')
+                            .split(' ')
+                            .filter(Boolean)
+                            .map((s: string) => s[0])
+                            .slice(0, 2)
+                            .join('')
+                            .toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        color: '#e5e7eb',
+                        fontWeight: 700,
+                        fontSize: 13,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {user?.displayName || 'User'}
+                      </div>
+                      <div style={{
+                        color: '#94a3b8',
+                        fontSize: 11,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {user?.email || 'Not signed in'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sidebar Navigation */}
+                <div style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: '12px',
+                }}>
+                  {/* Navigation Items */}
+                  {[
+                    { id: 'overview', icon: <Settings size={16} />, label: 'Overview', subtitle: 'General settings' },
+                    { id: 'personalization', icon: <Brain size={16} />, label: 'Personalization', subtitle: 'Models & preferences' },
+                    { id: 'data-controls', icon: <Database size={16} />, label: 'Data Controls', subtitle: 'Privacy settings' },
+                    { id: 'tokens', icon: <Rocket size={16} />, label: 'Tokens', subtitle: 'Balance & rewards' },
+                    { id: 'dedicated-inference', icon: <Rocket size={16} />, label: 'Dedicated Inference', subtitle: 'API keys' },
+                    { id: 'status', icon: <Server size={16} />, label: 'Server Status', subtitle: 'Infrastructure' },
+                    { id: 'about', icon: <Info size={16} />, label: 'About', subtitle: 'App information' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setSelectedSettingsPage(item.id)}
+                      style={{
+                        width: '100%',
+                        background: selectedSettingsPage === item.id ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                        border: selectedSettingsPage === item.id ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid transparent',
+                        borderRadius: 10,
+                        padding: '10px 12px',
+                        marginBottom: 6,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (selectedSettingsPage !== item.id) {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedSettingsPage !== item.id) {
+                          e.currentTarget.style.background = 'transparent';
+                        }
+                      }}
+                    >
+                      <div style={{
+                        color: selectedSettingsPage === item.id ? '#10b981' : '#cbd5e1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        {item.icon}
+                      </div>
+                      <div style={{ flex: 1, textAlign: 'left' }}>
+                        <div style={{
+                          color: selectedSettingsPage === item.id ? '#e5e7eb' : '#cbd5e1',
+                          fontWeight: 600,
+                          fontSize: 13,
+                        }}>
+                          {item.label}
+                        </div>
+                        <div style={{
+                          color: '#94a3b8',
+                          fontSize: 10,
+                          marginTop: 2,
+                        }}>
+                          {item.subtitle}
+                        </div>
+                      </div>
+                      {selectedSettingsPage === item.id && (
+                        <div style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
+                          background: '#10b981',
+                        }} />
+                      )}
+                    </button>
+                  ))}
+
+                  {/* Logout Button */}
+                  <button
+                    onClick={async () => {
+                      if (confirm('Are you sure you want to sign out of your account?')) {
+                        try {
+                          await auth.signOut();
+                          setShowSettingsModal(false);
+                          navigate('/login');
+                        } catch (error) {
+                          console.error('Sign out error:', error);
+                        }
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(244, 63, 94, 0.1)',
+                      border: '1px solid rgba(244, 63, 94, 0.3)',
+                      borderRadius: 10,
+                      padding: '10px 12px',
+                      marginTop: 12,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(244, 63, 94, 0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(244, 63, 94, 0.1)';
+                    }}
+                  >
+                    <div style={{
+                      color: '#fecdd3',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <LogOut size={16} />
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div style={{
+                        color: '#fecdd3',
+                        fontWeight: 700,
+                        fontSize: 13,
+                      }}>
+                        Logout
+                      </div>
+                      <div style={{
+                        color: 'rgba(254, 205, 211, 0.8)',
+                        fontSize: 10,
+                        marginTop: 2,
+                      }}>
+                        End session
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Content Area - 67% */}
+              {!isMobile && (
+                <div style={{
+                  width: '67%',
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  position: 'relative',
+                  zIndex: 1,
+                }}>
+                  {/* Content Header */}
+                  <div style={{
+                    padding: '20px 24px',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent)',
+                  }}>
+                    <h3 style={{
+                      color: '#e5e7eb',
+                      fontSize: 18,
+                      fontWeight: 800,
+                      margin: 0,
+                      letterSpacing: '0.3px',
+                    }}>
+                      {selectedSettingsPage === 'overview' && 'Overview'}
+                      {selectedSettingsPage === 'personalization' && 'Personalization'}
+                      {selectedSettingsPage === 'models' && 'Model Preferences'}
+                      {selectedSettingsPage === 'data-controls' && 'Data Controls'}
+                      {selectedSettingsPage === 'tokens' && 'Tokens & Rewards'}
+                      {selectedSettingsPage === 'dedicated-inference' && 'Dedicated Inference'}
+                      {selectedSettingsPage === 'status' && 'Server Status'}
+                      {selectedSettingsPage === 'about' && 'About'}
+                    </h3>
+                  </div>
+
+                  {/* Content Body */}
+                  <div style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    padding: '24px',
+                  }}>
+                    {selectedSettingsPage === 'overview' && (
+                      <div>
+                        <div style={{
+                          background: 'rgba(255, 255, 255, 0.04)',
+                          borderRadius: 14,
+                          padding: 20,
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          marginBottom: 16,
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            marginBottom: 12,
+                          }}>
+                            <Mail size={20} color="#cbd5e1" />
+                            <div>
+                              <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 14 }}>Email</div>
+                              <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 2 }}>
+                                {user?.email || 'Not signed in'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{
+                          color: '#94a3b8',
+                          fontSize: 13,
+                          textAlign: 'center',
+                          marginTop: 40,
+                        }}>
+                          Select a setting from the sidebar to view details
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedSettingsPage !== 'overview' && (
+                      <div style={{
+                        height: '100%',
+                        overflow: 'auto',
+                        padding: '20px',
+                      }}>
+                        {/* Personalization Page */}
+                        {selectedSettingsPage === 'personalization' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                            {/* Model Preferences */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Models & Voice</div>
+                              <button
+                                onClick={() => {
+                                  setSelectedSettingsPage('models');
+                                }}
+                                style={{
+                                  width: '100%',
+                                  background: 'rgba(255, 255, 255, 0.04)',
+                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  borderRadius: 10,
+                                  padding: '12px 14px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 10,
+                                  transition: 'all 0.2s ease',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                                }}
+                              >
+                                <Brain size={18} color="#cbd5e1" />
+                                <div style={{ flex: 1, textAlign: 'left' }}>
+                                  <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 13 }}>Model Preferences</div>
+                                  <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Choose your preferred AI models</div>
+                                </div>
+                                <ChevronRight size={16} color="#64748b" />
+                              </button>
+                            </div>
+
+                            {/* Reasoning Effort */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Reasoning Effort</div>
+                              <div style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 10,
+                                padding: 14,
+                              }}>
+                                <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 10 }}>
+                                  Set the effort level for reasoning models (like o1, QwQ, etc.)
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  {(['low', 'medium', 'high'] as const).map((level) => (
+                                    <button
+                                      key={level}
+                                      onClick={() => setReasoningLevel(level)}
+                                      style={{
+                                        flex: 1,
+                                        padding: '8px 12px',
+                                        background: reasoningLevel === level ? 'rgba(59, 130, 246, 0.8)' : 'transparent',
+                                        border: `1px solid ${reasoningLevel === level ? 'rgba(59, 130, 246, 0.8)' : 'rgba(255, 255, 255, 0.12)'}`,
+                                        borderRadius: 8,
+                                        color: reasoningLevel === level ? '#ffffff' : '#94a3b8',
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
+                                      }}
+                                    >
+                                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Settings Toggles */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Settings</div>
+                              <div style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 10,
+                                padding: 12,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 10,
+                              }}>
+                                {/* Stream Responses */}
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  cursor: 'pointer',
+                                }}>
+                                  <div>
+                                    <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 13 }}>Stream Responses</div>
+                                    <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Enable live token streaming</div>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={streamingEnabled}
+                                    onChange={(e) => setStreamingEnabled(e.target.checked)}
+                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+
+                            {/* AI Memory */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>SwitchAI ∞ NeuraAI</div>
+                              <div style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 10,
+                                overflow: 'hidden',
+                              }}>
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '12px 14px',
+                                  cursor: 'pointer',
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <Database size={18} color="#cbd5e1" />
+                                    <div>
+                                      <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 13 }}>Enable AI Memory</div>
+                                      <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Remember preferences and facts</div>
+                                    </div>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={aiMemoryEnabled}
+                                    onChange={(e) => setAiMemoryEnabled(e.target.checked)}
+                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                                  />
+                                </label>
+
+                                <div style={{ height: 1, background: 'rgba(255, 255, 255, 0.06)', marginLeft: 42 }} />
+
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '12px 14px',
+                                  cursor: 'pointer',
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <Database size={18} color="#cbd5e1" />
+                                    <div>
+                                      <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 13 }}>Enable AI Memory</div>
+                                      <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Remember preferences and facts</div>
+                                    </div>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={aiMemoryEnabled}
+                                    onChange={(e) => setAiMemoryEnabled(e.target.checked)}
+                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                                  />
+                                </label>
+
+                                <div style={{ height: 1, background: 'rgba(255, 255, 255, 0.06)', marginLeft: 42 }} />
+
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '12px 14px',
+                                  cursor: 'pointer',
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <Search size={18} color="#cbd5e1" />
+                                    <div>
+                                      <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 13 }}>Search Chat History</div>
+                                      <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Provide better contextual responses</div>
+                                    </div>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={chatHistorySearchEnabled}
+                                    onChange={(e) => setChatHistorySearchEnabled(e.target.checked)}
+                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+
+                            {/* AI Personality */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>AI Personality</div>
+                              <select
+                                value={personality}
+                                onChange={(e) => setPersonality(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  background: 'rgba(255, 255, 255, 0.04)',
+                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  borderRadius: 10,
+                                  padding: '12px 14px',
+                                  color: '#e5e7eb',
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <option value="default" style={{ background: '#1a1a1a' }}>Default - Balanced style and tone</option>
+                                <option value="professional" style={{ background: '#1a1a1a' }}>Professional - Polished and precise</option>
+                                <option value="friendly" style={{ background: '#1a1a1a' }}>Friendly - Warm and chatty</option>
+                                <option value="candid" style={{ background: '#1a1a1a' }}>Candid - Direct and encouraging</option>
+                                <option value="quirky" style={{ background: '#1a1a1a' }}>Quirky - Playful and imaginative</option>
+                                <option value="efficient" style={{ background: '#1a1a1a' }}>Efficient - Concise and plain</option>
+                                <option value="nerdy" style={{ background: '#1a1a1a' }}>Nerdy - Exploratory and enthusiastic</option>
+                                <option value="cynical" style={{ background: '#1a1a1a' }}>Cynical - Critical and sarcastic</option>
+                              </select>
+                            </div>
+
+                            {/* Custom Instructions */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Custom Instructions</div>
+                              <textarea
+                                value={customInstruction}
+                                onChange={(e) => setCustomInstruction(e.target.value)}
+                                placeholder="How would you like SwitchAI to respond? (e.g., 'Be concise', 'Explain like I'm a beginner')"
+                                style={{
+                                  width: '100%',
+                                  background: 'rgba(255, 255, 255, 0.04)',
+                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  borderRadius: 10,
+                                  padding: '12px 14px',
+                                  color: '#e5e7eb',
+                                  fontSize: 13,
+                                  resize: 'vertical',
+                                  minHeight: 80,
+                                  fontFamily: 'inherit',
+                                }}
+                              />
+                            </div>
+
+                            {/* Your Nickname */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Your Nickname</div>
+                              <input
+                                type="text"
+                                value={nickname}
+                                onChange={(e) => setNickname(e.target.value)}
+                                placeholder="What should I call you?"
+                                style={{
+                                  width: '100%',
+                                  background: 'rgba(255, 255, 255, 0.04)',
+                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  borderRadius: 10,
+                                  padding: '12px 14px',
+                                  color: '#e5e7eb',
+                                  fontSize: 13,
+                                }}
+                              />
+                            </div>
+
+                            {/* Your Occupation */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Your Occupation</div>
+                              <input
+                                type="text"
+                                value={occupation}
+                                onChange={(e) => setOccupation(e.target.value)}
+                                placeholder="What do you do?"
+                                style={{
+                                  width: '100%',
+                                  background: 'rgba(255, 255, 255, 0.04)',
+                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  borderRadius: 10,
+                                  padding: '12px 14px',
+                                  color: '#e5e7eb',
+                                  fontSize: 13,
+                                }}
+                              />
+                            </div>
+
+                            {/* More About You */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>More About You</div>
+                              <textarea
+                                value={moreAboutYou}
+                                onChange={(e) => setMoreAboutYou(e.target.value)}
+                                placeholder="Anything else I should know? (interests, preferences, etc.)"
+                                style={{
+                                  width: '100%',
+                                  background: 'rgba(255, 255, 255, 0.04)',
+                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  borderRadius: 10,
+                                  padding: '12px 14px',
+                                  color: '#e5e7eb',
+                                  fontSize: 13,
+                                  resize: 'vertical',
+                                  minHeight: 80,
+                                  fontFamily: 'inherit',
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Model Preferences Page */}
+                        {selectedSettingsPage === 'models' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            {/* Header with Search and Sort */}
+                            <div style={{
+                              display: 'flex',
+                              gap: 10,
+                              marginBottom: 20,
+                              position: 'sticky',
+                              top: 0,
+                              zIndex: 10,
+                              background: '#0b0f14', // Match modal background
+                              paddingBottom: 10,
+                              paddingTop: 5
+                            }}>
+                              <div style={{
+                                flex: 1,
+                                position: 'relative',
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 10,
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '0 12px',
+                              }}>
+                                <Search size={16} color="#64748b" />
+                                <input
+                                  type="text"
+                                  placeholder="Search models..."
+                                  value={searchQuery}
+                                  onChange={(e) => setSearchQuery(e.target.value)}
+                                  style={{
+                                    flex: 1,
+                                    background: 'transparent',
+                                    border: 'none',
+                                    padding: '10px',
+                                    color: '#e5e7eb',
+                                    fontSize: 13,
+                                    outline: 'none',
+                                  }}
+                                />
+                              </div>
+
+                              <div style={{ position: 'relative' }}>
+                                <button
+                                  onClick={() => {
+                                    const nextSort = modelsSortBy === 'provider' ? 'inference' : modelsSortBy === 'inference' ? 'type' : 'provider';
+                                    setModelsSortBy(nextSort);
+                                  }}
+                                  style={{
+                                    height: '100%',
+                                    background: 'rgba(255, 255, 255, 0.04)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    borderRadius: 10,
+                                    padding: '0 14px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    color: '#e5e7eb',
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                    minWidth: 110,
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  {modelsSortBy === 'provider' && <Server size={16} color="#3b82f6" />}
+                                  {modelsSortBy === 'inference' && <Zap size={16} color="#3b82f6" />}
+                                  {modelsSortBy === 'type' && <Brain size={16} color="#3b82f6" />}
+                                  <span style={{ textTransform: 'capitalize' }}>{modelsSortBy}</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Models List */}
+                            <div style={{ flex: 1 }}>
+                              {models.length === 0 ? (
+                                <div style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: 40,
+                                  color: '#94a3b8',
+                                  gap: 12
+                                }}>
+                                  <div style={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: 20,
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    <RefreshCw size={20} className={modelsLoading ? "animate-spin" : ""} />
+                                  </div>
+                                  <div>Loading models...</div>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                                  {(() => {
+                                    // Filter and Group Models
+                                    const filtered = models.filter(m =>
+                                      m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      m.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      (m.provider || '').toLowerCase().includes(searchQuery.toLowerCase())
+                                    );
+
+                                    // Grouping Logic
+                                    const groups: Record<string, typeof models> = {};
+                                    filtered.forEach(m => {
+                                      let key = 'Other';
+                                      if (modelsSortBy === 'provider') key = m.provider || 'Other';
+                                      else if (modelsSortBy === 'inference') key = m.inference ? (m.inference.charAt(0).toUpperCase() + m.inference.slice(1)) : 'Other';
+                                      else if (modelsSortBy === 'type') key = m.type.charAt(0).toUpperCase() + m.type.slice(1);
+
+                                      if (!groups[key]) groups[key] = [];
+                                      groups[key].push(m);
+                                    });
+
+                                    const sortedKeys = Object.keys(groups).sort();
+
+                                    if (filtered.length === 0) {
+                                      return (
+                                        <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                                          No models found matching "{searchQuery}"
+                                        </div>
+                                      );
+                                    }
+
+                                    return sortedKeys.map(groupKey => (
+                                      <div key={groupKey}>
+                                        <div style={{
+                                          color: '#94a3b8',
+                                          fontSize: 12,
+                                          fontWeight: 700,
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.5px',
+                                          marginBottom: 12,
+                                          paddingLeft: 4
+                                        }}>
+                                          {groupKey}
+                                        </div>
+                                        <div style={{
+                                          display: 'grid',
+                                          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                                          gap: 12
+                                        }}>
+                                          {groups[groupKey].map(model => {
+                                            const isSelected = selectedModels.includes(model.id);
+                                            const isMaxReached = !isSelected && selectedModels.length >= 6;
+
+                                            return (
+                                              <div
+                                                key={model.id}
+                                                onClick={() => {
+                                                  if (isMaxReached) {
+                                                    alert('You can select up to 6 models.');
+                                                    return;
+                                                  }
+                                                  const next = isSelected
+                                                    ? selectedModels.filter(id => id !== model.id)
+                                                    : [...selectedModels, model.id];
+                                                  setSelectedModels(next);
+                                                }}
+                                                style={{
+                                                  background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255, 255, 255, 0.04)',
+                                                  border: isSelected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                                  borderRadius: 12,
+                                                  padding: 12,
+                                                  cursor: isMaxReached ? 'not-allowed' : 'pointer',
+                                                  opacity: isMaxReached ? 0.5 : 1,
+                                                  transition: 'all 0.2s ease',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: 12
+                                                }}
+                                              >
+                                                {/* Provider Icon/Letter */}
+                                                <div style={{
+                                                  width: 36,
+                                                  height: 36,
+                                                  borderRadius: 10,
+                                                  background: isSelected ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center',
+                                                  fontSize: 16,
+                                                  fontWeight: 700,
+                                                  color: isSelected ? '#60a5fa' : '#cbd5e1'
+                                                }}>
+                                                  {(model.provider || model.id).charAt(0).toUpperCase()}
+                                                </div>
+
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                  <div style={{
+                                                    color: '#e5e7eb',
+                                                    fontSize: 13,
+                                                    fontWeight: 600,
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis'
+                                                  }}>
+                                                    {model.label}
+                                                  </div>
+                                                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                                    {/* Type Badge */}
+                                                    <div style={{
+                                                      fontSize: 10,
+                                                      padding: '2px 6px',
+                                                      borderRadius: 4,
+                                                      background: model.type === 'reason' ? 'rgba(168, 85, 247, 0.2)' :
+                                                        model.type === 'vision' ? 'rgba(236, 72, 153, 0.2)' :
+                                                          'rgba(148, 163, 184, 0.2)',
+                                                      color: model.type === 'reason' ? '#d8b4fe' :
+                                                        model.type === 'vision' ? '#f9a8d4' :
+                                                          '#cbd5e1',
+                                                      fontWeight: 600,
+                                                      textTransform: 'uppercase'
+                                                    }}>
+                                                      {model.type === 'reason' ? 'Reasoning' : model.type}
+                                                    </div>
+                                                  </div>
+                                                </div>
+
+                                                {/* Checkbox */}
+                                                <div style={{
+                                                  width: 20,
+                                                  height: 20,
+                                                  borderRadius: 6,
+                                                  border: isSelected ? 'none' : '2px solid rgba(255, 255, 255, 0.2)',
+                                                  background: isSelected ? '#3b82f6' : 'transparent',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center'
+                                                }}>
+                                                  {isSelected && <Check size={14} color="#ffffff" strokeWidth={3} />}
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    ));
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Data Controls Page */}
+                        {selectedSettingsPage === 'data-controls' && (
+                          <div>
+                            {/* Privacy Section */}
+                            <div style={{ marginBottom: 20 }}>
+                              <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Privacy</div>
+                              <label style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 10,
+                                padding: 16,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                              }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                                }}>
+                                <div>
+                                  <div style={{ color: '#ffffff', fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Use data for training</div>
+                                  <div style={{ color: '#888888', fontSize: 12 }}>Allow anonymous usage to improve models</div>
+                                </div>
+                                <input
+                                  type="checkbox"
+                                  checked={useForTraining}
+                                  onChange={(e) => setUseForTraining(e.target.checked)}
+                                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                                />
+                              </label>
+                            </div>
+
+                            {/* Danger Zone */}
+                            <div>
+                              <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Danger zone</div>
+                              <div style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 10,
+                                padding: 12,
+                              }}>
+                                <button onClick={() => {
+                                  if (confirm('Delete all active chats? This cannot be undone.')) {
+                                    try {
+                                      const raw = localStorage.getItem('switchai_chats');
+                                      const chats = raw ? JSON.parse(raw) : [];
+                                      const toKeep = chats.filter((c: any) => !!c?.archived);
+                                      localStorage.setItem('switchai_chats', JSON.stringify(toKeep));
+                                      alert('Active chats cleared.');
+                                    } catch (e) { console.error(e); }
+                                  }
+                                }} style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 10,
+                                  padding: '12px 14px',
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  borderRadius: 8,
+                                  color: '#ef4444',
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  marginBottom: 8,
+                                }}>
+                                  <Trash2 size={16} />
+                                  <div style={{ flex: 1, textAlign: 'left' }}>
+                                    <div>Delete Active Chats</div>
+                                    <div style={{ fontSize: 11, fontWeight: 400, marginTop: 2, color: '#fca5a5' }}>Archived chats kept</div>
+                                  </div>
+                                </button>
+                                <button onClick={() => {
+                                  if (confirm('Delete all archived chats? This cannot be undone.')) {
+                                    try {
+                                      const raw = localStorage.getItem('switchai_chats');
+                                      const chats = raw ? JSON.parse(raw) : [];
+                                      const toKeep = chats.filter((c: any) => !c?.archived);
+                                      localStorage.setItem('switchai_chats', JSON.stringify(toKeep));
+                                      alert('Archived chats cleared.');
+                                    } catch (e) { console.error(e); }
+                                  }
+                                }} style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 10,
+                                  padding: '12px 14px',
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  borderRadius: 8,
+                                  color: '#ef4444',
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}>
+                                  <Archive size={16} />
+                                  <div style={{ flex: 1, textAlign: 'left' }}>
+                                    <div>Delete Archived Chats</div>
+                                    <div style={{ fontSize: 11, fontWeight: 400, marginTop: 2, color: '#fca5a5' }}>Active chats kept</div>
+                                  </div>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tokens Page */}
+                        {selectedSettingsPage === 'tokens' && (
+                          <div>
+                            {/* Balance Card */}
+                            <div style={{
+                              background: 'rgba(255, 255, 255, 0.04)',
+                              borderRadius: 14,
+                              padding: 20,
+                              marginBottom: 16,
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              position: 'relative',
+                              overflow: 'hidden',
+                            }}>
+                              <div style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                height: '100%',
+                                background: 'radial-gradient(circle at top left, rgba(16, 185, 129, 0.1) 0%, transparent 50%)',
+                                pointerEvents: 'none',
+                              }} />
+                              <div style={{ position: 'relative', zIndex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                  <Coins size={20} color="#10b981" />
+                                  <div style={{ color: '#888888', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Your Balance</div>
+                                </div>
+                                <div style={{
+                                  fontSize: 42,
+                                  fontWeight: 800,
+                                  color: '#ffffff',
+                                  marginBottom: 6,
+                                  letterSpacing: '-1.5px',
+                                }}>
+                                  {formatTokens(tokenData?.balance || 0)}
+                                </div>
+                                <div style={{ color: '#666666', fontSize: 13 }}>tokens available</div>
+                              </div>
+                            </div>
+
+                            {/* Stats Grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
+                              <div style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                borderRadius: 10,
+                                padding: 14,
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                  <TrendingUp size={16} color="#10b981" />
+                                  <div style={{ color: '#888888', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Earned</div>
+                                </div>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: '#10b981' }}>
+                                  {formatTokens(tokenData?.totalEarned || 0)}
+                                </div>
+                              </div>
+
+                              <div style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                borderRadius: 10,
+                                padding: 14,
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                  <TrendingDown size={16} color="#f59e0b" />
+                                  <div style={{ color: '#888888', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Spent</div>
+                                </div>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b' }}>
+                                  {formatTokens(tokenData?.totalSpent || 0)}
+                                </div>
+                              </div>
+
+                              <div style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                borderRadius: 10,
+                                padding: 14,
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                  <Sparkles size={16} color="#a78bfa" />
+                                  <div style={{ color: '#888888', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Referrals</div>
+                                </div>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: '#a78bfa' }}>
+                                  {tokenData?.referralCount || 0}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Earn More Section */}
+                            <div style={{
+                              background: 'rgba(255,255,255,0.04)',
+                              borderRadius: 10,
+                              padding: 16,
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                            }}>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', marginBottom: 12 }}>Earn More Tokens</div>
+                              <div style={{
+                                padding: 14,
+                                background: 'rgba(255,255,255,0.02)',
+                                borderRadius: 8,
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                              }}>
+                                <div style={{ color: '#ffffff', fontWeight: 600, marginBottom: 10, fontSize: 13 }}>How to earn:</div>
+                                <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, color: '#888888', fontSize: 12 }}>
+                                  <li>Share your referral code with friends</li>
+                                  <li>They sign up using your code</li>
+                                  <li>You both get rewarded!</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Dedicated Inference Page */}
+                        {selectedSettingsPage === 'dedicated-inference' && (
+                          <div style={{
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: 12,
+                            padding: '40px 20px',
+                            textAlign: 'center',
+                          }}>
+                            <div style={{ color: '#888888', fontSize: 14 }}>
+                              Dedicated inference settings coming soon.
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Status Page */}
+                        {selectedSettingsPage === 'status' && (
+                          <div style={{
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: 12,
+                            padding: '40px 20px',
+                            textAlign: 'center',
+                          }}>
+                            <div style={{ color: '#888888', fontSize: 14 }}>
+                              Server status information coming soon.
+                            </div>
+                          </div>
+                        )}
+
+                        {/* About Page */}
+                        {selectedSettingsPage === 'about' && (
+                          <div style={{
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: 12,
+                            padding: 20,
+                          }}>
+                            <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>About SwitchAi</div>
+                            <div style={{ color: '#888888', fontSize: 13, lineHeight: 1.6 }}>
+                              <div style={{ marginBottom: 12 }}>
+                                <strong style={{ color: '#ffffff' }}>Version:</strong> 1.0.0
+                              </div>
+                              <div style={{ marginBottom: 12 }}>
+                                <strong style={{ color: '#ffffff' }}>Platform:</strong> Web Application
+                              </div>
+                              <div>
+                                <strong style={{ color: '#ffffff' }}>Description:</strong> SwitchAi is a powerful AI chat platform that gives you access to multiple AI models in one place.
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

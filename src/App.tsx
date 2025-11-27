@@ -159,15 +159,15 @@ export default function App() {
       <Route path="/login/signin" element={<RedirectIfAuthed><SignIn /></RedirectIfAuthed>} />
 
       {/* Protected area */}
-  <Route path="/homescreen" element={<RequireAuth><HomeScreen /></RequireAuth>} />
-  <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-  <Route path="/settings/tokens" element={<RequireAuth><TokensPage /></RequireAuth>} />
-  <Route path="/settings/personalization" element={<RequireAuth><PersonalizationPage /></RequireAuth>} />
-  <Route path="/settings/ai-memory" element={<RequireAuth><AIMemoryPage /></RequireAuth>} />
-  <Route path="/settings/data-controls" element={<RequireAuth><DataControlsPage /></RequireAuth>} />
-  <Route path="/settings/dedicated-inference" element={<RequireAuth><DedicatedInferencePage /></RequireAuth>} />
-  <Route path="/settings/status" element={<RequireAuth><StatusPage /></RequireAuth>} />
-  <Route path="/settings/about" element={<RequireAuth><AboutPage /></RequireAuth>} />
+      <Route path="/homescreen" element={<RequireAuth><HomeScreen /></RequireAuth>} />
+      <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+      <Route path="/settings/tokens" element={<RequireAuth><TokensPage /></RequireAuth>} />
+      <Route path="/settings/personalization" element={<RequireAuth><PersonalizationPage /></RequireAuth>} />
+      <Route path="/settings/ai-memory" element={<RequireAuth><AIMemoryPage /></RequireAuth>} />
+      <Route path="/settings/data-controls" element={<RequireAuth><DataControlsPage /></RequireAuth>} />
+      <Route path="/settings/dedicated-inference" element={<RequireAuth><DedicatedInferencePage /></RequireAuth>} />
+      <Route path="/settings/status" element={<RequireAuth><StatusPage /></RequireAuth>} />
+      <Route path="/settings/about" element={<RequireAuth><AboutPage /></RequireAuth>} />
 
       {/* Fallback to appropriate entry based on auth */}
       <Route path="*" element={<Navigate to={user ? '/homescreen' : '/login'} replace />} />

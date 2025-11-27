@@ -11,85 +11,103 @@ interface SettingsLayoutProps {
 
 export default function SettingsLayout({ title, subtitle, children }: SettingsLayoutProps) {
   const navigate = useNavigate();
-  const [scrolled, setScrolled] = React.useState(false);
-
-  React.useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 10);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   return (
     <div style={{
+      position: 'relative',
       minHeight: '100dvh',
       background: '#000000',
       color: '#ffffff',
+      overflow: 'hidden',
     }}>
-      {/* Header with scroll shadow */}
-      <div className="animate-fade-in-down" style={{
-        padding: '16px 20px',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        background: '#000000',
+      {/* Geometric decorative elements */}
+      <div style={{
+        position: 'absolute',
+        width: 280,
+        height: 280,
+        borderRadius: 140,
+        border: '1px solid rgba(255, 255, 255, 0.06)',
+        top: '-15%',
+        right: '-15%',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute',
+        width: 180,
+        height: 180,
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        transform: 'rotate(45deg)',
+        bottom: '20%',
+        left: '10%',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute',
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        border: '1px solid rgba(255, 255, 255, 0.04)',
+        top: '60%',
+        right: '10%',
+        pointerEvents: 'none',
+      }} />
+
+      {/* Header with gradient overlay */}
+      <div style={{
         position: 'sticky',
         top: 0,
-        zIndex: 10,
-        transition: 'box-shadow 0.3s ease',
-        boxShadow: scrolled ? '0 4px 12px rgba(0, 0, 0, 0.5)' : 'none',
+        zIndex: 100,
+        background: 'transparent',
       }}>
-        <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* Back button with enhanced hover */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px 16px 12px',
+          position: 'relative',
+        }}>
           <button
             onClick={() => navigate(-1)}
             style={{
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: 10,
-              width: 38,
-              height: 38,
+              position: 'absolute',
+              left: 16,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              color: '#ffffff',
+              color: '#fff',
               transition: 'all 0.2s ease',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-              e.currentTarget.style.transform = 'translateX(-2px)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-              e.currentTarget.style.transform = 'translateX(0)';
-            }}
-            onMouseDown={(e) => {
-              e.currentTarget.style.transform = 'translateX(-2px) scale(0.95)';
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.transform = 'translateX(-2px)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
             }}
           >
             <ChevronLeft size={20} />
           </button>
-          
-          {/* Title with fade animation */}
-          <div>
-            <h1 style={{ 
-              fontSize: 20, 
-              fontWeight: 700, 
-              margin: 0, 
-              color: '#ffffff',
-              letterSpacing: '-0.3px',
+
+          <div style={{ textAlign: 'center' }}>
+            <h1 style={{
+              color: '#e5e7eb',
+              fontSize: 20,
+              fontWeight: 800,
+              textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)',
+              letterSpacing: '0.3px',
+              margin: 0,
             }}>
               {title}
             </h1>
             {subtitle && (
-              <p style={{ 
-                fontSize: 13, 
-                color: '#666666', 
+              <p style={{
+                fontSize: 13,
+                color: '#94a3b8',
                 margin: '2px 0 0 0',
                 fontWeight: 500,
               }}>
@@ -98,15 +116,32 @@ export default function SettingsLayout({ title, subtitle, children }: SettingsLa
             )}
           </div>
         </div>
+
+        {/* Header fade overlay */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 120,
+          background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7), transparent)',
+          pointerEvents: 'none',
+          zIndex: -1,
+        }} />
       </div>
 
-      {/* Content with fade-in animation */}
-      <div className="animate-fade-in-up" style={{ 
-        maxWidth: 900, 
-        margin: '0 auto', 
-        padding: '24px 20px 80px',
+      {/* Scrollable content */}
+      <div style={{
+        padding: '24px 16px 120px',
+        position: 'relative',
+        zIndex: 1,
       }}>
-        {children}
+        <div className="animate-fade-in-up" style={{
+          maxWidth: 900,
+          margin: '0 auto',
+        }}>
+          {children}
+        </div>
       </div>
     </div>
   );

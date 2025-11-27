@@ -9,8 +9,8 @@ export default function LoginHome() {
   const [isTransitioning, setIsTransitioning] = React.useState(false);
 
   React.useEffect(() => {
-    fetch('/animations/app.json').then(r => r.json()).then(setAppAnim).catch(() => {});
-    fetch('/animations/getstarted.json').then(r => r.json()).then(setGetStartedAnim).catch(() => {});
+    fetch('/animations/app.json').then(r => r.json()).then(setAppAnim).catch(() => { });
+    fetch('/animations/getstarted.json').then(r => r.json()).then(setGetStartedAnim).catch(() => { });
   }, []);
 
   const handleGetStarted = () => {

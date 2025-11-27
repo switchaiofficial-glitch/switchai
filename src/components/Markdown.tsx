@@ -4,10 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import { theme } from '../theme';
 
 interface MarkdownRendererProps {
@@ -172,52 +170,89 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
     })
   let processedContent = baseProcessed;
   if (mathLatexEnabled || katexOnlyEnabled) {
-    // Helper function to aggressively clean LaTeX spacing commands
+    // Helper function to clean LaTeX spacing commands without breaking math commands
     const cleanLatexSpacing = (text: string) => {
       return text
-        // All variations of spacing commands
-        .replace(/\\\\\s*\[[^\]]+\]/g, ' ')
-        .replace(/\\\s*\[[\d.]+[a-zA-Z]+\]/g, ' ')
-        .replace(/\/\s*\[[\d.]+[a-zA-Z]+\]/g, ' ')
-        .replace(/\[[\d.]+pt\]/g, ' ')
-        .replace(/\[[\d.]+em\]/g, ' ')
-        .replace(/\[[\d.]+cm\]/g, ' ')
-        // Standalone backslash-backslash
-        .replace(/\\\\\s*$/gm, '')
+        // Only clean spacing commands: \\[...] but NOT \command[...]
+        .replace(/\\\\\s*\[[\d.]+(?:pt|em|cm|mm|in|ex|pc|bp|dd|cc|sp)\]/g, ' ')
+        // Clean standalone spacing brackets
+        .replace(/(?<![a-zA-Z])\[[\d.]+(?:pt|em|cm|mm|in|ex|pc|bp|dd|cc|sp)\]/g, ' ')
+        // Clean forward slash spacing
+        .replace(/\/\s*\[[\d.]+(?:pt|em|cm|mm|in|ex|pc|bp|dd|cc|sp)\]/g, ' ')
+        // Standalone backslash-backslash at end of line
+        .replace(/\\\\\s*$/gm, ' ')
         .replace(/\\\\\s+/g, ' ');
     };
 
     processedContent = baseProcessed
-      // Pre-clean the entire content
-      .replace(/\\\\\s*\[[^\]]+\]/g, ' ')
-      .replace(/\/\[[\d.]+[a-zA-Z]+\]/g, ' ')
       // Convert \[...\] to $$...$$ for display math
       .replace(/\\\[([\s\S]{2,}?)\\\]/g, (_: any, math: string) => {
-        return `$$${cleanLatexSpacing(math).trim()}$$`;
+        const cleaned = cleanLatexSpacing(math).trim();
+        try {
+          const html = katex.renderToString(cleaned, {
+            displayMode: true,
+            throwOnError: false,
+            errorColor: '#94a3b8',
+            strict: false,
+            trust: true,
+            output: 'html'
+          });
+          return `<div class="math-display">${html}</div>`;
+        } catch (e) {
+          return `$$${cleaned}$$`;
+        }
       })
       // Convert \(...\) to $...$ for inline math
       .replace(/\\\(([\s\S]{1,}?)\\\)/g, (_: any, math: string) => {
-        return `$${cleanLatexSpacing(math).trim()}$`;
+        const cleaned = cleanLatexSpacing(math).trim();
+        try {
+          const html = katex.renderToString(cleaned, {
+            displayMode: false,
+            throwOnError: false,
+            errorColor: '#94a3b8',
+            strict: false,
+            trust: true,
+            output: 'html'
+          });
+          return `<span class="math-inline">${html}</span>`;
+        } catch (e) {
+          return `$${cleaned}$`;
+        }
       })
-      // Clean ALL existing $$...$$ blocks (multiple passes)
+      // Render display math $$...$$
       .replace(/\$\$([\s\S]+?)\$\$/g, (_: any, math: string) => {
-        return `$$${cleanLatexSpacing(math).trim()}$$`;
+        const cleaned = cleanLatexSpacing(math).trim();
+        try {
+          const html = katex.renderToString(cleaned, {
+            displayMode: true,
+            throwOnError: false,
+            errorColor: '#94a3b8',
+            strict: false,
+            trust: true,
+            output: 'html'
+          });
+          return `<div class="math-display">${html}</div>`;
+        } catch (e) {
+          return `$$${cleaned}$$`;
+        }
       })
-      .replace(/\$\$([\s\S]+?)\$\$/g, (_: any, math: string) => {
-        return `$$${cleanLatexSpacing(math).trim()}$$`;
-      })
-      // Clean ALL existing $...$ inline blocks (multiple passes)
+      // Render inline math $...$
       .replace(/\$([^\$\n]+?)\$/g, (_: any, math: string) => {
-        return `$${cleanLatexSpacing(math).trim()}$`;
-      })
-      .replace(/\$([^\$\n]+?)\$/g, (_: any, math: string) => {
-        return `$${cleanLatexSpacing(math).trim()}$`;
-      })
-      // Final aggressive global cleanup
-      .replace(/\\\\\s*\[[^\]]+\]/g, '')
-      .replace(/\/\[[\d.]+[a-zA-Z]+\]/g, '')
-      .replace(/\[[\d.]+pt\]/g, '')
-      .replace(/\[[\d.]+em\]/g, '');
+        const cleaned = cleanLatexSpacing(math).trim();
+        try {
+          const html = katex.renderToString(cleaned, {
+            displayMode: false,
+            throwOnError: false,
+            errorColor: '#94a3b8',
+            strict: false,
+            trust: true,
+            output: 'html'
+          });
+          return `<span class="math-inline">${html}</span>`;
+        } catch (e) {
+          return `$${cleaned}$`;
+        }
+      });
   }
 
   return (
@@ -233,49 +268,261 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
       }}
     >
       <ReactMarkdown
-        remarkPlugins={[
-          remarkGfm,
-          ...(mathLatexEnabled || katexOnlyEnabled ? [remarkMath] as any : []),
-        ]}
-        rehypePlugins={(mathLatexEnabled || katexOnlyEnabled)
-          ? [
-              rehypeRaw as any,
-              [rehypeKatex as any, { 
-                strict: false, 
-                throwOnError: false, 
-                trust: true, 
-                fleqn: false,
-                errorColor: '#94a3b8',
-                output: 'html',
-                macros: {
-                  "\\RR": "\\mathbb{R}",
-                  "\\NN": "\\mathbb{N}",
-                  "\\ZZ": "\\mathbb{Z}",
-                  "\\QQ": "\\mathbb{Q}",
-                  "\\CC": "\\mathbb{C}"
-                }
-              }]
-            ]
-          : [rehypeRaw as any]}
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
-          // Math elements - ensure proper HTML rendering
-          span: ({ node, className, children, ...props }: any) => {
-            // Check if this is a KaTeX span
-            if (className && (className.includes('katex') || className.includes('math'))) {
-              // Return as-is to preserve KaTeX HTML structure
-              return <span className={className} {...props}>{children}</span>;
+          // Code blocks with syntax highlighting
+          code({ node, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '');
+            const inline = !match;
+            const rawLang = match ? match[1].toLowerCase() : '';
+            const lang = languageMap[rawLang] || rawLang || 'text';
+            const prettyLang = getPrettyLanguageName(lang);
+            const codeString = String(children).replace(/\n$/, '');
+            const codeKey = `${lang}-${codeString.slice(0, 50)}`;
+            const isCopied = copiedCode === codeKey;
+            const isReasoning = ['reason', 'reasoning', 'thinking', 'think', 'chain', 'thoughts'].includes(rawLang);
+            const isMathFence = ['math', 'latex', 'tex', 'katex'].includes(rawLang);
+            
+            // Fenced math: render via KaTeX in display mode (only when enabled)
+            if (!inline && match && isMathFence && (mathLatexEnabled || katexOnlyEnabled)) {
+              let html = '';
+              try {
+                html = katex.renderToString(codeString, { 
+                  displayMode: true, 
+                  throwOnError: false,
+                  errorColor: '#94a3b8',
+                  strict: false,
+                  trust: true,
+                  output: 'html'
+                });
+              } catch (e) {
+                html = `<pre style="color: #94a3b8;">${codeString.replace(/</g,'&lt;')}</pre>`;
+              }
+              return (
+                <div style={{ margin: '16px 0', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.03)' }}>
+                  <div dangerouslySetInnerHTML={{ __html: html }} />
+                </div>
+              );
             }
-            return <span {...props}>{children}</span>;
-          },
-          div: ({ node, className, children, ...props }: any) => {
-            // Check if this is a KaTeX display math div
-            if (className && (className.includes('katex') || className.includes('math'))) {
-              // Return as-is to preserve KaTeX HTML structure
-              return <div className={className} {...props}>{children}</div>;
+
+            if (!inline && match && isReasoning) {
+              const reasoningContent = codeString.trim() || 'Nothing to think, Skipped Reasoning';
+              return (
+                <div style={{
+                  margin: '16px 0',
+                  borderRadius: 14,
+                  border: `1px solid rgba(255,255,255,0.1)`,
+                  background: 'rgba(255,255,255,0.02)',
+                  overflow: 'hidden',
+                  width: '100%',
+                  maxWidth: '100%',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                }}>
+                  <button
+                    onClick={() => setReasoningOpen(!reasoningOpen)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: theme.colors.text,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      borderBottom: reasoningOpen ? `1px solid rgba(255,255,255,0.08)` : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: 'rgba(255,255,255,0.06)',
+                      }}>
+                        <Brain size={16} color={theme.colors.text} strokeWidth={2.5} />
+                      </div>
+                      <strong style={{ 
+                        fontSize: 14, 
+                        letterSpacing: 0.2, 
+                        fontWeight: '600',
+                      }}>
+                        Reasoning Process
+                      </strong>
+                    </span>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      color: theme.colors.textMuted,
+                      fontSize: 12,
+                    }}>
+                      <span style={{ fontWeight: 500 }}>
+                        {reasoningOpen ? 'Hide' : 'Show'}
+                      </span>
+                      {reasoningOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </div>
+                  </button>
+                  {reasoningOpen && (
+                    <div style={{ 
+                      maxHeight: 500, 
+                      overflowY: 'auto', 
+                      overflowX: 'hidden',
+                      background: 'rgba(0,0,0,0.2)',
+                    }}>
+                      <div style={{
+                        padding: '20px 18px',
+                        fontSize: 14,
+                        lineHeight: 1.7,
+                        fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                        color: 'rgba(255,255,255,0.9)',
+                        whiteSpace: 'pre-wrap',
+                        wordWrap: 'break-word',
+                        overflowWrap: 'break-word',
+                        maxWidth: '100%',
+                        letterSpacing: '0.01em',
+                      }}>
+                        {reasoningContent}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
             }
-            return <div {...props}>{children}</div>;
+
+            return !inline && match ? (
+              <div style={{ 
+                marginBottom: '16px',
+                marginTop: '16px',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                border: `1px solid ${theme.colors.border}`,
+                background: 'rgba(255, 255, 255, 0.03)'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: '8px 16px',
+                  borderBottom: `1px solid ${theme.colors.border}`,
+                }}>
+                  <div style={{
+                    fontSize: '12px',
+                    color: theme.colors.textMuted,
+                    fontWeight: '600',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}>
+                    <span style={{
+                      display: 'inline-block',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: theme.colors.primary,
+                    }}></span>
+                    {prettyLang}
+                  </div>
+                  <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyCode(codeString, lang); }}
+                    style={{
+                      background: isCopied 
+                        ? 'rgba(99,102,241,0.15)'
+                        : 'rgba(255, 255, 255, 0.06)',
+                      border: `1px solid ${isCopied 
+                        ? 'rgba(99,102,241,0.35)'
+                        : theme.colors.border}`,
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      color: isCopied ? theme.colors.primary : theme.colors.text,
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isCopied) {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isCopied) {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                      }
+                    }}
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check size={14} />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clipboard size={14} />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div style={{ maxHeight: 480, overflow: 'auto' }}>
+                  <SyntaxHighlighter
+                    style={vscDarkPlus as any}
+                    language={lang}
+                    PreTag="div"
+                    customStyle={{
+                      margin: 0,
+                      padding: '16px',
+                      background: 'transparent',
+                      fontSize: '14px',
+                      lineHeight: '1.6',
+                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                      minWidth: '100%'
+                    }}
+                    showLineNumbers={codeString.split('\n').length > 3}
+                    wrapLines
+                    {...props}
+                  >
+                    {codeString}
+                  </SyntaxHighlighter>
+                </div>
+              </div>
+            ) : (
+              // Inline code
+              <code
+                className={className}
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  color: theme.colors.text,
+                  padding: '3px 7px',
+                  borderRadius: '5px',
+                  fontSize: '0.9em',
+                  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                  fontWeight: '500',
+                  border: `1px solid ${theme.colors.border}`,
+                }}
+                {...props}
+              >
+                {children}
+              </code>
+            );
           },
-          
           // Headings
           h1: ({ children }) => (
             <h1 style={{ 
@@ -530,221 +777,6 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             />
           ),
           
-          // Code blocks with syntax highlighting
-          code({ node, className, children, ...props }: any) {
-            const match = /language-(\w+)/.exec(className || '');
-            const inline = !match;
-            const rawLang = match ? match[1].toLowerCase() : '';
-            const lang = languageMap[rawLang] || rawLang || 'text';
-            const prettyLang = getPrettyLanguageName(lang);
-            const codeString = String(children).replace(/\n$/, '');
-            const codeKey = `${lang}-${codeString.slice(0, 50)}`;
-            const isCopied = copiedCode === codeKey;
-            const isReasoning = ['reason', 'reasoning', 'thinking', 'think', 'chain', 'thoughts'].includes(rawLang);
-            const isMathFence = ['math', 'latex', 'tex', 'katex'].includes(rawLang);
-            
-            // Fenced math: render via KaTeX in display mode (only when enabled)
-            if (!inline && match && isMathFence && (mathLatexEnabled || katexOnlyEnabled)) {
-              let html = '';
-              try {
-                html = katex.renderToString(codeString, { 
-                  displayMode: true, 
-                  throwOnError: false,
-                  errorColor: '#94a3b8',
-                  strict: false,
-                  trust: true,
-                  output: 'html'
-                });
-              } catch (e) {
-                html = `<pre style="color: #94a3b8;">${codeString.replace(/</g,'&lt;')}</pre>`;
-              }
-              return (
-                <div style={{ margin: '16px 0', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.03)' }}>
-                  <div dangerouslySetInnerHTML={{ __html: html }} />
-                </div>
-              );
-            }
-
-            if (!inline && match && isReasoning) {
-              const reasoningContent = codeString.trim() || 'Nothing to think, Skipped Reasoning';
-              return (
-                <div style={{
-                  margin: '12px 0',
-                  borderRadius: 12,
-                  border: `1.5px solid rgba(255,255,255,0.12)`,
-                  background: 'rgba(255,255,255,0.03)',
-                  overflow: 'hidden',
-                  width: '100%',
-                  maxWidth: '100%',
-                }}>
-                  <button
-                    onClick={() => setReasoningOpen(!reasoningOpen)}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 14px',
-                      border: 'none',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: theme.colors.text,
-                      cursor: 'pointer',
-                      transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                  >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <Brain size={16} color={theme.colors.text} strokeWidth={2} />
-                      <strong style={{ fontSize: 13, letterSpacing: 0.3, fontWeight: '600' }}>Reasoning</strong>
-                    </span>
-                    {reasoningOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </button>
-                  {reasoningOpen && (
-                    <div style={{ maxHeight: 480, overflowY: 'auto', overflowX: 'hidden' }}>
-                      <pre style={{
-                        margin: 0,
-                        padding: 16,
-                        fontSize: 14,
-                        lineHeight: 1.6,
-                        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
-                        color: theme.colors.text,
-                        background: 'transparent',
-                        whiteSpace: 'pre-wrap',
-                        wordWrap: 'break-word',
-                        overflowWrap: 'break-word',
-                        maxWidth: '100%',
-                      }}>
-                        {reasoningContent}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            return !inline && match ? (
-              <div style={{ 
-                marginBottom: '16px',
-                marginTop: '16px',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                border: `1px solid ${theme.colors.border}`,
-                background: 'rgba(255, 255, 255, 0.03)'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  padding: '8px 16px',
-                  borderBottom: `1px solid ${theme.colors.border}`,
-                }}>
-                  <div style={{
-                    fontSize: '12px',
-                    color: theme.colors.textMuted,
-                    fontWeight: '600',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}>
-                    <span style={{
-                      display: 'inline-block',
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: theme.colors.primary,
-                    }}></span>
-                    {prettyLang}
-                  </div>
-                  <button
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyCode(codeString, lang); }}
-                    style={{
-                      background: isCopied 
-                        ? 'rgba(99,102,241,0.15)'
-                        : 'rgba(255, 255, 255, 0.06)',
-                      border: `1px solid ${isCopied 
-                        ? 'rgba(99,102,241,0.35)'
-                        : theme.colors.border}`,
-                      borderRadius: '6px',
-                      padding: '6px 12px',
-                      color: isCopied ? theme.colors.primary : theme.colors.text,
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all 0.2s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isCopied) {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isCopied) {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                      }
-                    }}
-                  >
-                    {isCopied ? (
-                      <>
-                        <Check size={14} />
-                        <span>Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Clipboard size={14} />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <div style={{ maxHeight: 480, overflow: 'auto' }}>
-                  <SyntaxHighlighter
-                    style={vscDarkPlus as any}
-                    language={lang}
-                    PreTag="div"
-                    customStyle={{
-                      margin: 0,
-                      padding: '16px',
-                      background: 'transparent',
-                      fontSize: '14px',
-                      lineHeight: '1.6',
-                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
-                      minWidth: '100%'
-                    }}
-                    showLineNumbers={codeString.split('\n').length > 3}
-                    wrapLines
-                    {...props}
-                  >
-                    {codeString}
-                  </SyntaxHighlighter>
-                </div>
-              </div>
-            ) : (
-              // Inline code
-              <code
-                className={className}
-                style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  color: theme.colors.text,
-                  padding: '3px 7px',
-                  borderRadius: '5px',
-                  fontSize: '0.9em',
-                  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
-                  fontWeight: '500',
-                  border: `1px solid ${theme.colors.border}`,
-                }}
-                {...props}
-              >
-                {children}
-              </code>
-            );
-          },
           
           // Pre tag (wraps code blocks)
           pre: ({ children }) => (

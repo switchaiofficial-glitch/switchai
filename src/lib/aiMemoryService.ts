@@ -131,8 +131,14 @@ async function clearPendingUpdates(): Promise<void> {
  */
 function isRelevant(text: string): boolean {
   const t = safeText(text).toLowerCase();
-  if (!t) return false;
-  if (t.length < 10) return false;
+  if (!t) {
+    console.log('[AI Memory] isRelevant: empty text');
+    return false;
+  }
+  if (t.length < 10) {
+    console.log('[AI Memory] isRelevant: text too short (<10 chars)');
+    return false;
+  }
   
   // Greetings and common short phrases (REJECT)
   if (/^(hi|hello|hey|hola|yo|sup|greetings|good morning|good afternoon|good evening|good night)[\s!.?]*$/i.test(t)) return false;
@@ -160,6 +166,7 @@ function isRelevant(text: string): boolean {
   if (/\bmy (birthday|age|email|phone|timezone|device|language|pronouns|job|role|team|occupation|profession)\b/.test(t)) return true;
   if (/\b(answer style|tone:)\b/.test(t) || /\bspeak like\b/.test(t)) return true;
 
+  console.log('[AI Memory] isRelevant: rejected (does not match any patterns)');
   return false;
 }
 
@@ -195,23 +202,45 @@ export async function clearMemoryDocument(): Promise<void> {
  * Store user message in memory if relevant
  */
 export async function maybeStoreFromUserMessage(text: string): Promise<void> {
-  if (!isMemoryEnabled()) return;
-  if (!isRelevant(text)) return;
+  console.log('[AI Memory] maybeStoreFromUserMessage called with:', text?.substring(0, 100));
+  if (!isMemoryEnabled()) {
+    console.log('[AI Memory] Memory is disabled');
+    return;
+  }
+  if (!isRelevant(text)) {
+    console.log('[AI Memory] Text not relevant for memory');
+    return;
+  }
   
+  console.log('[AI Memory] Adding to pending updates');
   await addPendingUpdate(text);
+  console.log('[AI Memory] Successfully added to pending updates');
 }
 
 /**
  * Process pending updates (simplified for web)
+ * Returns object with success status and count of updates processed
  */
-export async function processPendingUpdates(): Promise<void> {
-  if (!isMemoryEnabled()) return;
+export async function processPendingUpdates(): Promise<{ success: boolean; count: number; message: string }> {
+  console.log('[AI Memory] processPendingUpdates called');
+  
+  if (!isMemoryEnabled()) {
+    console.log('[AI Memory] Memory is disabled');
+    return { success: false, count: 0, message: 'AI Memory is disabled' };
+  }
   
   const updates = await getPendingUpdates();
-  if (updates.length === 0) return;
+  console.log('[AI Memory] Found', updates.length, 'pending updates');
+  
+  if (updates.length === 0) {
+    return { success: false, count: 0, message: 'No pending updates found. Start chatting and mention things you want remembered!' };
+  }
   
   await loadMemoryDoc();
-  if (!memoryDoc) return;
+  if (!memoryDoc) {
+    console.log('[AI Memory] Failed to load memory document');
+    return { success: false, count: 0, message: 'Failed to load memory document' };
+  }
   
   // Simple concatenation for web (no AI processing)
   const newContent = updates.map(u => u.text).join('\n');
@@ -227,6 +256,9 @@ export async function processPendingUpdates(): Promise<void> {
   
   await saveMemoryDoc();
   await clearPendingUpdates();
+  
+  console.log('[AI Memory] Successfully processed', updates.length, 'updates');
+  return { success: true, count: updates.length, message: `Successfully processed ${updates.length} update${updates.length > 1 ? 's' : ''}` };
 }
 
 /**
@@ -239,6 +271,14 @@ export async function getMemoryForContext(): Promise<string> {
   if (!memoryDoc || !memoryDoc.content) return '';
   
   return memoryDoc.content;
+}
+
+/**
+ * Get count of pending updates
+ */
+export async function getPendingUpdatesCount(): Promise<number> {
+  const updates = await getPendingUpdates();
+  return updates.length;
 }
 
 /**
