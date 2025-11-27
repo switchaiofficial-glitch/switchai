@@ -406,68 +406,71 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             // If there's a match (language specified) or if inline prop is explicitly false, it's a code block
             return !inline && (match || codeString.includes('\n')) ? (
               <div style={{
-                marginBottom: '16px',
+                marginBottom: '24px',
                 marginTop: '16px',
-                borderRadius: '12px',
+                borderRadius: '16px',
                 overflow: 'hidden',
-                border: `1px solid ${theme.colors.border}`,
-                background: 'rgba(255, 255, 255, 0.03)'
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: '#1e1e1e', // VS Code-like dark background
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
               }}>
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  padding: '8px 16px',
-                  borderBottom: `1px solid ${theme.colors.border}`,
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  padding: '12px 16px',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
                 }}>
+                  {/* Mac-like window controls */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff5f56' }}></div>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ffbd2e' }}></div>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#27c93f' }}></div>
+                  </div>
+
+                  {/* Language Label */}
                   <div style={{
-                    fontSize: '12px',
-                    color: theme.colors.textMuted,
-                    fontWeight: '600',
+                    position: 'absolute',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    fontSize: '13px',
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    fontWeight: '500',
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
+                    pointerEvents: 'none', // Allow clicks to pass through if needed
                   }}>
-                    <span style={{
-                      display: 'inline-block',
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: theme.colors.primary,
-                    }}></span>
                     {prettyLang}
                   </div>
+
+                  {/* Copy Button */}
                   <button
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyCode(codeString, lang); }}
                     style={{
-                      background: isCopied
-                        ? 'rgba(99,102,241,0.15)'
-                        : 'rgba(255, 255, 255, 0.06)',
-                      border: `1px solid ${isCopied
-                        ? 'rgba(99,102,241,0.35)'
-                        : theme.colors.border}`,
-                      borderRadius: '6px',
-                      padding: '6px 12px',
-                      color: isCopied ? theme.colors.primary : theme.colors.text,
+                      background: 'transparent',
+                      border: 'none',
+                      color: isCopied ? '#4ade80' : 'rgba(255, 255, 255, 0.4)',
                       fontSize: '12px',
-                      fontWeight: '600',
+                      fontWeight: '500',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
                       transition: 'all 0.2s ease',
+                      padding: '4px 8px',
+                      borderRadius: '6px',
                     }}
                     onMouseEnter={(e) => {
                       if (!isCopied) {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                        e.currentTarget.style.color = '#ffffff';
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isCopied) {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                        e.currentTarget.style.color = 'rgba(255, 255, 255, 0.4)';
+                        e.currentTarget.style.background = 'transparent';
                       }
                     }}
                   >
@@ -484,21 +487,29 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
                     )}
                   </button>
                 </div>
-                <div style={{ maxHeight: 480, overflow: 'auto' }}>
+                <div style={{ maxHeight: 500, overflow: 'auto', position: 'relative' }}>
                   <SyntaxHighlighter
                     style={vscDarkPlus as any}
                     language={lang}
                     PreTag="div"
                     customStyle={{
                       margin: 0,
-                      padding: '16px',
-                      background: 'transparent',
+                      padding: '20px',
+                      background: 'transparent', // Use container background
                       fontSize: '14px',
                       lineHeight: '1.6',
                       fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
                       minWidth: '100%'
                     }}
-                    showLineNumbers={codeString.split('\n').length > 3}
+                    showLineNumbers={true} // Always show line numbers for code blocks
+                    lineNumberStyle={{
+                      minWidth: '2.5em',
+                      paddingRight: '1em',
+                      color: '#9ca3af', // Distinct light grey
+                      textAlign: 'right',
+                      userSelect: 'none',
+                      opacity: 1,
+                    }}
                     wrapLines
                     {...props}
                   >

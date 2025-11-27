@@ -497,6 +497,26 @@ export default function HomeScreen() {
   // Load chat history on mount
   useEffect(() => {
     refreshChatHistory();
+
+    // Restore last active chat if available
+    try {
+      const lastChatId = localStorage.getItem('lastActiveChatId');
+      if (lastChatId) {
+        const chat = getChat(lastChatId);
+        if (chat) {
+          setMessages(chat.messages || []);
+          setCurrentChatId(lastChatId);
+          if (chat.model) {
+            setSelectedModel(chat.model);
+          }
+        } else {
+          // Chat not found (maybe deleted), clear storage
+          localStorage.removeItem('lastActiveChatId');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to restore last chat:', e);
+    }
   }, []);
 
   // Load Lottie animations
@@ -1268,6 +1288,7 @@ export default function HomeScreen() {
   const handleNewChat = () => {
     setMessages([]);
     setCurrentChatId(null);
+    localStorage.removeItem('lastActiveChatId'); // Clear persisted chat
     setStreamingText('');
     inputRef.current?.focus();
   };
@@ -1277,6 +1298,7 @@ export default function HomeScreen() {
     if (chat) {
       setMessages(chat.messages || []);
       setCurrentChatId(chatId);
+      localStorage.setItem('lastActiveChatId', chatId); // Persist active chat
       if (chat.model) {
         setSelectedModel(chat.model);
       }
@@ -2415,7 +2437,7 @@ export default function HomeScreen() {
                             </div>
                           </div>
                           {selectedModel === model.id && (
-                            <Check size={18} color="#fff" strokeWidth={3} flexShrink={0} />
+                            <Check size={18} color="#fff" strokeWidth={3} style={{ flexShrink: 0 }} />
                           )}
                         </div>
                       );
