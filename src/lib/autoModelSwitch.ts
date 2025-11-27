@@ -203,7 +203,7 @@ export function detectQueryIntent(input: string, hasImages = false, conversation
 
   // Find highest scoring intent
   let maxScore = 0;
-  let detectedIntent = QueryIntent.GENERAL;
+  let detectedIntent: QueryIntentType = QueryIntent.GENERAL;
 
   Object.entries(scores).forEach(([intent, score]) => {
     if (score > maxScore) {
