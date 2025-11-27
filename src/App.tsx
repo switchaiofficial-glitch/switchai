@@ -1,4 +1,5 @@
 import { auth } from '@/lib/firebase';
+import Lottie from 'lottie-react';
 import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import HomeScreen from './pages/HomeScreen';
@@ -17,6 +18,7 @@ import './styles/animations.css';
 export default function App() {
   const [user, setUser] = React.useState<any | null>(auth.currentUser);
   const [authLoading, setAuthLoading] = React.useState(true);
+  const [appAnimation, setAppAnimation] = React.useState<any>(null);
 
   React.useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
@@ -24,6 +26,20 @@ export default function App() {
       setAuthLoading(false);
     });
     return () => unsub();
+  }, []);
+
+  // Load app.json Lottie animation
+  React.useEffect(() => {
+    const loadAnimation = async () => {
+      try {
+        const response = await fetch('/animations/app.json');
+        const data = await response.json();
+        setAppAnimation(data);
+      } catch (error) {
+        console.warn('Failed to load app animation:', error);
+      }
+    };
+    loadAnimation();
   }, []);
 
   const RequireAuth = ({ children }: { children: JSX.Element }) => {
@@ -42,26 +58,13 @@ export default function App() {
       <div style={{
         position: 'fixed',
         inset: 0,
-        background: '#000000',
+        background: '#212121',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
       }}>
-        {/* Animated background glow */}
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '300px',
-          height: '300px',
-          background: 'radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%)',
-          animation: 'pulse 3s ease-in-out infinite',
-          pointerEvents: 'none',
-        }} />
-
         {/* Main content */}
         <div className="animate-fade-in-up" style={{
           display: 'flex',
@@ -73,23 +76,15 @@ export default function App() {
           {/* Logo with scale animation */}
           <div className="animate-scale-in" style={{
             marginBottom: '32px',
-            padding: '20px',
-            background: 'rgba(255, 255, 255, 0.04)',
-            borderRadius: '24px',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
           }}>
-            <img
-              src="/app.png"
-              alt="SwitchAi Logo"
-              style={{
-                width: '80px',
-                height: '80px',
-                objectFit: 'contain',
-                animation: 'glow 2s ease-in-out infinite',
-                borderRadius: '20px',
-              }}
-            />
+            {appAnimation && (
+              <Lottie
+                animationData={appAnimation}
+                loop={true}
+                autoplay={true}
+                style={{ width: 80, height: 80 }}
+              />
+            )}
           </div>
 
           {/* Brand text */}
@@ -99,7 +94,7 @@ export default function App() {
           }}>
             <h1 style={{
               fontSize: '32px',
-              fontWeight: '700',
+              fontWeight: '400',
               color: '#ffffff',
               margin: '0 0 8px 0',
               letterSpacing: '-0.5px',
@@ -108,9 +103,9 @@ export default function App() {
             </h1>
             <p style={{
               fontSize: '15px',
-              color: '#666666',
+              color: '#ffffff',
               margin: 0,
-              fontWeight: 500,
+              fontWeight: 400,
             }}>
               Initializing your experience...
             </p>
@@ -125,21 +120,21 @@ export default function App() {
             <div style={{
               width: '10px',
               height: '10px',
-              background: 'linear-gradient(135deg, #ffffff 0%, #888888 100%)',
+              background: '#ffffff',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out infinite both',
             }} />
             <div style={{
               width: '10px',
               height: '10px',
-              background: 'linear-gradient(135deg, #ffffff 0%, #888888 100%)',
+              background: '#ffffff',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out 0.2s infinite both',
             }} />
             <div style={{
               width: '10px',
               height: '10px',
-              background: 'linear-gradient(135deg, #ffffff 0%, #888888 100%)',
+              background: '#ffffff',
               borderRadius: '50%',
               animation: 'bounce 1.4s ease-in-out 0.4s infinite both',
             }} />

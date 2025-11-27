@@ -30,9 +30,9 @@ export const darkTheme: WebTheme = {
     background: '#212121',  // Main page: rgb(33, 33, 33)
     surface: '#181818',     // Sidebar: rgb(24, 24, 24)
     surfaceAlt: '#2a2a2a',  // Input/message area (slightly lighter)
-    text: '#ececec',        // Light text
-    textMuted: '#b4b4b4',
-    textSecondary: '#8e8e8e',
+    text: '#ffffff',        // Pure white text
+    textMuted: '#ffffff',   // Pure white text
+    textSecondary: '#ffffff', // Pure white text
     border: '#444444',      // Subtle border
     borderLight: '#555555',
     primary: '#19c37d',     // ChatGPT's green

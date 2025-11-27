@@ -212,6 +212,7 @@ export default function HomeScreen() {
   const [chatsExpanded, setChatsExpanded] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [avatarError, setAvatarError] = useState(false);
+  const [avatarBgColor, setAvatarBgColor] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [modelPickerPos, setModelPickerPos] = useState({ top: 0, left: 0 });
   const [reasoningLevel, setReasoningLevel] = useState<'low' | 'medium' | 'high'>(() => {
@@ -230,7 +231,7 @@ export default function HomeScreen() {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
 
   // Lottie animations state
-  const [dotsAnimation, setDotsAnimation] = useState<any>(null);
+  const [appAnimation, setAppAnimation] = useState<any>(null);
 
   // Prompt suggestion state
   const [showContextualPrompts, setShowContextualPrompts] = useState(false);
@@ -249,7 +250,7 @@ export default function HomeScreen() {
   const [selectedSettingsPage, setSelectedSettingsPage] = useState<string>('overview');
   const [isSettingsScrolling, setIsSettingsScrolling] = useState(false);
   const settingsScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Personality modal state
   const [showPersonalityModal, setShowPersonalityModal] = useState(false);
   const [personalityPickerPos, setPersonalityPickerPos] = useState({ top: 0, left: 0 });
@@ -264,6 +265,28 @@ export default function HomeScreen() {
       return false;
     }
   });
+
+  // Welcome messages with random selection
+  const welcomeMessages = [
+    `What's on the agenda today?`,
+    `Good to see you, {name}`,
+    `What are you working on?`,
+    `Where should we begin?`,
+    `Hey, {name}.. Ready to dive in?`,
+    `What should we create today?`,
+    `Looking for some ideas?`,
+  ];
+
+  const [randomWelcomeMessage, setRandomWelcomeMessage] = useState<string>('');
+
+  // Initialize random welcome message on mount
+  useEffect(() => {
+    const randomIndex = Math.floor(Math.random() * welcomeMessages.length);
+    const selectedMessage = welcomeMessages[randomIndex];
+    const userName = user?.displayName?.split(' ')[0] || 'there';
+    const finalMessage = selectedMessage.replace('{name}', userName);
+    setRandomWelcomeMessage(finalMessage);
+  }, [user?.displayName]);
 
   // Personalization settings state (additional ones not already defined)
   const [streamingEnabled, setStreamingEnabled] = useState(() => {
@@ -406,6 +429,55 @@ export default function HomeScreen() {
     return () => unsubscribe();
   }, []);
 
+  // Generate initials from display name
+  const initials = React.useMemo(() => {
+    const displayName = user?.displayName || 'U';
+    const parts = displayName.trim().split(' ').filter(Boolean);
+
+    if (parts.length === 0) return 'U';
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+
+    // First letter of first name + first letter of last name
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }, [user?.displayName]);
+
+  // Load or generate avatar background color
+  useEffect(() => {
+    const loadAvatarColor = async () => {
+      if (!user?.uid) return;
+
+      try {
+        const storageKey = `avatar_color_${user.uid}`;
+        const storedColor = localStorage.getItem(storageKey);
+
+        if (storedColor) {
+          setAvatarBgColor(storedColor);
+        } else {
+          // Generate a random color from a nice palette
+          const palette = [
+            '#8b5cf6', // purple
+            '#f59e0b', // amber
+            '#10b981', // emerald
+            '#3b82f6', // blue
+            '#ef4444', // red
+            '#14b8a6', // teal
+            '#ec4899', // pink
+            '#f97316', // orange
+            '#06b6d4', // cyan
+            '#a855f7', // violet
+          ];
+          const randomColor = palette[Math.floor(Math.random() * palette.length)];
+          localStorage.setItem(storageKey, randomColor);
+          setAvatarBgColor(randomColor);
+        }
+      } catch (error) {
+        console.error('Error loading avatar color:', error);
+      }
+    };
+
+    loadAvatarColor();
+  }, [user?.uid]);
+
   // Load models from Firestore
   useEffect(() => {
     loadModels();
@@ -430,9 +502,9 @@ export default function HomeScreen() {
   useEffect(() => {
     const loadAnimations = async () => {
       try {
-        const dotsResponse = await fetch('/animations/dots.json');
-        const dotsData = await dotsResponse.json();
-        setDotsAnimation(dotsData);
+        const appResponse = await fetch('/animations/app.json');
+        const appData = await appResponse.json();
+        setAppAnimation(appData);
       } catch (error) {
         console.warn('Failed to load Lottie animations:', error);
       }
@@ -549,7 +621,7 @@ export default function HomeScreen() {
   // Track previous mode to detect actual mode changes
   const isPillMode = !input.includes('\n') && inputHeight <= 75;
   const prevPillModeRef = useRef(isPillMode);
-  
+
   useEffect(() => {
     // Only refocus if mode actually changed AND there's input text
     if (prevPillModeRef.current !== isPillMode && input.length > 0) {
@@ -1728,10 +1800,10 @@ export default function HomeScreen() {
         position: isMobile ? 'fixed' as const : 'relative' as const,
         left: isMobile ? 0 : undefined,
         top: isMobile ? 0 : undefined,
-        width: isMobile ? (sidebarOpen ? '100vw' : '0') : (sidebarOpen ? '15vw' : '60px'),
-        minWidth: isMobile ? '0' : (sidebarOpen ? '17vw' : '60px'),
-        background: theme.colors.surface,
-        borderRight: `1px solid ${theme.colors.border}`,
+        width: isMobile ? (sidebarOpen ? '100vw' : '0') : (sidebarOpen ? '260px' : '60px'),
+        minWidth: isMobile ? '0' : (sidebarOpen ? '260px' : '60px'),
+        background: sidebarOpen ? theme.colors.surface : 'rgb(33, 33, 33)',
+        borderRight: sidebarOpen ? 'none' : '1px solid rgb(44, 44, 44)',
         display: 'flex',
         flexDirection: 'column',
         transition: 'width 0.3s ease',
@@ -1754,7 +1826,22 @@ export default function HomeScreen() {
             padding: '12px 0',
             alignItems: 'center',
             gap: '8px',
-          }}>
+          }}
+            onMouseEnter={(e) => {
+              const container = e.currentTarget;
+              const svg = container.querySelector('svg[data-rtl-flip]');
+              const lottieDiv = container.querySelector('div[data-lottie]');
+              if (svg) (svg as any).style.opacity = '1';
+              if (lottieDiv) (lottieDiv as HTMLElement).style.opacity = '0';
+            }}
+            onMouseLeave={(e) => {
+              const container = e.currentTarget;
+              const svg = container.querySelector('svg[data-rtl-flip]');
+              const lottieDiv = container.querySelector('div[data-lottie]');
+              if (svg) (svg as any).style.opacity = '0';
+              if (lottieDiv) (lottieDiv as HTMLElement).style.opacity = '1';
+            }}
+          >
             {/* Expand Sidebar Button */}
             <button
               onClick={() => setSidebarOpen(true)}
@@ -1763,23 +1850,60 @@ export default function HomeScreen() {
                 width: 44,
                 height: 44,
                 borderRadius: 12,
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: `1px solid ${theme.colors.border}`,
+                background: 'transparent',
+                border: 'none',
                 color: theme.colors.text,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: 'all 0.15s ease',
+                position: 'relative',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.background = 'transparent';
               }}
             >
-              <ChevronRight size={20} />
+              {appAnimation && (
+                <div
+                  data-lottie="true"
+                  style={{
+                    position: 'absolute',
+                    width: 44,
+                    height: 44,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: 1,
+                    transition: 'opacity 0.2s ease',
+                    pointerEvents: 'none',
+                  }}>
+                  <Lottie
+                    animationData={appAnimation}
+                    loop={true}
+                    autoplay={true}
+                    style={{ width: 32, height: 32 }}
+                  />
+                </div>
+              )}
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                xmlns="http://www.w3.org/2000/svg"
+                data-rtl-flip=""
+                className="icon max-md:hidden"
+                style={{
+                  transition: 'opacity 0.2s ease',
+                  opacity: 0,
+                }}
+              >
+                <path d="M6.83496 3.99992C6.38353 4.00411 6.01421 4.0122 5.69824 4.03801C5.31232 4.06954 5.03904 4.12266 4.82227 4.20012L4.62207 4.28606C4.18264 4.50996 3.81498 4.85035 3.55859 5.26848L3.45605 5.45207C3.33013 5.69922 3.25006 6.01354 3.20801 6.52824C3.16533 7.05065 3.16504 7.71885 3.16504 8.66301V11.3271C3.16504 12.2712 3.16533 12.9394 3.20801 13.4618C3.25006 13.9766 3.33013 14.2909 3.45605 14.538L3.55859 14.7216C3.81498 15.1397 4.18266 15.4801 4.62207 15.704L4.82227 15.79C5.03904 15.8674 5.31234 15.9205 5.69824 15.9521C6.01398 15.9779 6.383 15.986 6.83398 15.9902L6.83496 3.99992ZM18.165 11.3271C18.165 12.2493 18.1653 12.9811 18.1172 13.5702C18.0745 14.0924 17.9916 14.5472 17.8125 14.9648L17.7295 15.1415C17.394 15.8 16.8834 16.3511 16.2568 16.7353L15.9814 16.8896C15.5157 17.1268 15.0069 17.2285 14.4102 17.2773C13.821 17.3254 13.0893 17.3251 12.167 17.3251H7.83301C6.91071 17.3251 6.17898 17.3254 5.58984 17.2773C5.06757 17.2346 4.61294 17.1508 4.19531 16.9716L4.01855 16.8896C3.36014 16.5541 2.80898 16.0434 2.4248 15.4169L2.27051 15.1415C2.03328 14.6758 1.93158 14.167 1.88281 13.5702C1.83468 12.9811 1.83496 12.2493 1.83496 11.3271V8.66301C1.83496 7.74072 1.83468 7.00898 1.88281 6.41985C1.93157 5.82309 2.03329 5.31432 2.27051 4.84856L2.4248 4.57317C2.80898 3.94666 3.36012 3.436 4.01855 3.10051L4.19531 3.0175C4.61285 2.83843 5.06771 2.75548 5.58984 2.71281C6.17898 2.66468 6.91071 2.66496 7.83301 2.66496H12.167C13.0893 2.66496 13.821 2.66468 14.4102 2.71281C15.0069 2.76157 15.5157 2.86329 15.9814 3.10051L16.2568 3.25481C16.8833 3.63898 17.394 4.19012 17.7295 4.84856L17.8125 5.02531C17.9916 5.44285 18.0745 5.89771 18.1172 6.41985C18.1653 7.00898 18.165 7.74072 18.165 8.66301V11.3271ZM8.16406 15.995H12.167C13.1112 15.995 13.7794 15.9947 14.3018 15.9521C14.8164 15.91 15.1308 15.8299 15.3779 15.704L15.5615 15.6015C15.9797 15.3451 16.32 14.9774 16.5439 14.538L16.6299 14.3378C16.7074 14.121 16.7605 13.8478 16.792 13.4618C16.8347 12.9394 16.835 12.2712 16.835 11.3271V8.66301C16.835 7.71885 16.8347 7.05065 16.792 6.52824C16.7605 6.14232 16.7073 5.86904 16.6299 5.65227L16.5439 5.45207C16.32 5.01264 15.9796 4.64498 15.5615 4.3886L15.3779 4.28606C15.1308 4.16013 14.8165 4.08006 14.3018 4.03801C13.7794 3.99533 13.1112 3.99504 12.167 3.99504H8.16406C8.16407 3.99667 8.16504 3.99829 8.16504 3.99992L8.16406 15.995Z"></path>
+              </svg>
             </button>
 
             {/* New Chat Button */}
@@ -1790,8 +1914,8 @@ export default function HomeScreen() {
                 width: 44,
                 height: 44,
                 borderRadius: 12,
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: `1px solid ${theme.colors.border}`,
+                background: 'transparent',
+                border: 'none',
                 color: theme.colors.text,
                 cursor: 'pointer',
                 display: 'flex',
@@ -1803,10 +1927,10 @@ export default function HomeScreen() {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.background = 'transparent';
               }}
             >
-              <Pencil size={18} />
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="icon" aria-hidden="true"><path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z"></path></svg>
             </button>
 
             {/* Search Button */}
@@ -1817,8 +1941,8 @@ export default function HomeScreen() {
                 width: 44,
                 height: 44,
                 borderRadius: 12,
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: `1px solid ${theme.colors.border}`,
+                background: 'transparent',
+                border: 'none',
                 color: theme.colors.text,
                 cursor: 'pointer',
                 display: 'flex',
@@ -1830,10 +1954,10 @@ export default function HomeScreen() {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.background = 'transparent';
               }}
             >
-              <Search size={18} />
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="icon" aria-hidden="true"><path d="M14.0857 8.74999C14.0857 5.80355 11.6972 3.41503 8.75073 3.41503C5.80429 3.41503 3.41577 5.80355 3.41577 8.74999C3.41577 11.6964 5.80429 14.085 8.75073 14.085C11.6972 14.085 14.0857 11.6964 14.0857 8.74999ZM15.4158 8.74999C15.4158 10.3539 14.848 11.8245 13.9041 12.9746L13.9705 13.0303L16.9705 16.0303L17.0564 16.1338C17.2269 16.3919 17.1977 16.7434 16.9705 16.9707C16.7432 17.1975 16.3925 17.226 16.1345 17.0557L16.03 16.9707L13.03 13.9707L12.9753 13.9033C11.8253 14.8472 10.3547 15.415 8.75073 15.415C5.06975 15.415 2.08569 12.431 2.08569 8.74999C2.08569 5.06901 5.06975 2.08495 8.75073 2.08495C12.4317 2.08495 15.4158 5.06901 15.4158 8.74999Z"></path></svg>
             </button>
 
             {/* Spacer */}
@@ -1846,16 +1970,16 @@ export default function HomeScreen() {
               style={{
                 width: 44,
                 height: 44,
-                borderRadius: 12,
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                borderRadius: 999,
+                background: avatarBgColor || '#1f2937',
                 border: `1px solid ${theme.colors.border}`,
-                color: '#fff',
+                color: '#e5e7eb',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '16px',
-                fontWeight: '700',
+                fontWeight: '400',
                 transition: 'all 0.15s ease',
                 overflow: 'hidden',
               }}
@@ -1866,18 +1990,7 @@ export default function HomeScreen() {
                 e.currentTarget.style.transform = 'scale(1)';
               }}
             >
-              {user?.photoURL && !avatarError ? (
-                <img
-                  src={user.photoURL}
-                  alt={user?.displayName || user?.email || 'User'}
-                  onError={() => setAvatarError(true)}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              ) : (
-                <span>
-                  {(user?.displayName?.[0] || user?.email?.[0] || 'U').toUpperCase()}
-                </span>
-              )}
+              {avatarBgColor ? <span>{initials}</span> : null}
             </button>
           </div>
         )}
@@ -1892,12 +2005,19 @@ export default function HomeScreen() {
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                background: 'transparent',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Sparkles size={18} color="#fff" strokeWidth={2.5} />
+                {appAnimation && (
+                  <Lottie
+                    animationData={appAnimation}
+                    loop={true}
+                    autoplay={true}
+                    style={{ width: 32, height: 32 }}
+                  />
+                )}
               </div>
 
               {/* Collapse Button */}
@@ -1925,7 +2045,7 @@ export default function HomeScreen() {
                   e.currentTarget.style.background = 'transparent';
                 }}
               >
-                <ChevronLeft size={20} />
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" data-rtl-flip="" class="icon max-md:hidden"><path d="M6.83496 3.99992C6.38353 4.00411 6.01421 4.0122 5.69824 4.03801C5.31232 4.06954 5.03904 4.12266 4.82227 4.20012L4.62207 4.28606C4.18264 4.50996 3.81498 4.85035 3.55859 5.26848L3.45605 5.45207C3.33013 5.69922 3.25006 6.01354 3.20801 6.52824C3.16533 7.05065 3.16504 7.71885 3.16504 8.66301V11.3271C3.16504 12.2712 3.16533 12.9394 3.20801 13.4618C3.25006 13.9766 3.33013 14.2909 3.45605 14.538L3.55859 14.7216C3.81498 15.1397 4.18266 15.4801 4.62207 15.704L4.82227 15.79C5.03904 15.8674 5.31234 15.9205 5.69824 15.9521C6.01398 15.9779 6.383 15.986 6.83398 15.9902L6.83496 3.99992ZM18.165 11.3271C18.165 12.2493 18.1653 12.9811 18.1172 13.5702C18.0745 14.0924 17.9916 14.5472 17.8125 14.9648L17.7295 15.1415C17.394 15.8 16.8834 16.3511 16.2568 16.7353L15.9814 16.8896C15.5157 17.1268 15.0069 17.2285 14.4102 17.2773C13.821 17.3254 13.0893 17.3251 12.167 17.3251H7.83301C6.91071 17.3251 6.17898 17.3254 5.58984 17.2773C5.06757 17.2346 4.61294 17.1508 4.19531 16.9716L4.01855 16.8896C3.36014 16.5541 2.80898 16.0434 2.4248 15.4169L2.27051 15.1415C2.03328 14.6758 1.93158 14.167 1.88281 13.5702C1.83468 12.9811 1.83496 12.2493 1.83496 11.3271V8.66301C1.83496 7.74072 1.83468 7.00898 1.88281 6.41985C1.93157 5.82309 2.03329 5.31432 2.27051 4.84856L2.4248 4.57317C2.80898 3.94666 3.36012 3.436 4.01855 3.10051L4.19531 3.0175C4.61285 2.83843 5.06771 2.75548 5.58984 2.71281C6.17898 2.66468 6.91071 2.66496 7.83301 2.66496H12.167C13.0893 2.66496 13.821 2.66468 14.4102 2.71281C15.0069 2.76157 15.5157 2.86329 15.9814 3.10051L16.2568 3.25481C16.8833 3.63898 17.394 4.19012 17.7295 4.84856L17.8125 5.02531C17.9916 5.44285 18.0745 5.89771 18.1172 6.41985C18.1653 7.00898 18.165 7.74072 18.165 8.66301V11.3271ZM8.16406 15.995H12.167C13.1112 15.995 13.7794 15.9947 14.3018 15.9521C14.8164 15.91 15.1308 15.8299 15.3779 15.704L15.5615 15.6015C15.9797 15.3451 16.32 14.9774 16.5439 14.538L16.6299 14.3378C16.7074 14.121 16.7605 13.8478 16.792 13.4618C16.8347 12.9394 16.835 12.2712 16.835 11.3271V8.66301C16.835 7.71885 16.8347 7.05065 16.792 6.52824C16.7605 6.14232 16.7073 5.86904 16.6299 5.65227L16.5439 5.45207C16.32 5.01264 15.9796 4.64498 15.5615 4.3886L15.3779 4.28606C15.1308 4.16013 14.8165 4.08006 14.3018 4.03801C13.7794 3.99533 13.1112 3.99504 12.167 3.99504H8.16406C8.16407 3.99667 8.16504 3.99829 8.16504 3.99992L8.16406 15.995Z"></path></svg>
               </button>
             </div>
 
@@ -1958,7 +2078,7 @@ export default function HomeScreen() {
                     e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  <Pencil size={18} />
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="icon" aria-hidden="true"><path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z"></path></svg>
                   <span>New chat</span>
                 </button>
 
@@ -1992,7 +2112,7 @@ export default function HomeScreen() {
                     e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  <Search size={18} />
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="icon" aria-hidden="true"><path d="M14.0857 8.74999C14.0857 5.80355 11.6972 3.41503 8.75073 3.41503C5.80429 3.41503 3.41577 5.80355 3.41577 8.74999C3.41577 11.6964 5.80429 14.085 8.75073 14.085C11.6972 14.085 14.0857 11.6964 14.0857 8.74999ZM15.4158 8.74999C15.4158 10.3539 14.848 11.8245 13.9041 12.9746L13.9705 13.0303L16.9705 16.0303L17.0564 16.1338C17.2269 16.3919 17.1977 16.7434 16.9705 16.9707C16.7432 17.1975 16.3925 17.226 16.1345 17.0557L16.03 16.9707L13.03 13.9707L12.9753 13.9033C11.8253 14.8472 10.3547 15.415 8.75073 15.415C5.06975 15.415 2.08569 12.431 2.08569 8.74999C2.08569 5.06901 5.06975 2.08495 8.75073 2.08495C12.4317 2.08495 15.4158 5.06901 15.4158 8.74999Z"></path></svg>
                   <span>Search chats</span>
                 </button>
               </div>
@@ -2126,19 +2246,12 @@ export default function HomeScreen() {
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', borderRadius: '12px',
               }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: `1px solid ${theme.colors.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)' }}>
-                  {user?.photoURL && !avatarError ? (
-                    <img
-                      src={user.photoURL}
-                      alt={user?.displayName || user?.email || 'User'}
-                      onError={() => setAvatarError(true)}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    />
-                  ) : (
-                    <span style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>
-                      {(user?.displayName?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: `1px solid ${theme.colors.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: avatarBgColor || '#1f2937' }}>
+                  {avatarBgColor ? (
+                    <span style={{ fontSize: '16px', fontWeight: 400, color: '#e5e7eb' }}>
+                      {initials}
                     </span>
-                  )}
+                  ) : null}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '14px', fontWeight: 700, color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -2257,7 +2370,7 @@ export default function HomeScreen() {
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {selectedModelObj?.label || 'Select Model'}
               </span>
-              <ChevronDown size={16} />
+              <ChevronDown size={16} style={{ color: 'rgb(174, 174, 174)' }} />
             </button>
 
             {showModelPicker && ReactDOM.createPortal(
@@ -2315,10 +2428,10 @@ export default function HomeScreen() {
                     );
 
                     const byProvider = (provider: string) => models.filter(m => (m.provider || getProviderName(m.id)).toLowerCase() === provider.toLowerCase());
-                    
+
                     // Get unique providers from all models
                     const uniqueProviders = Array.from(new Set(models.map(m => (m.provider || getProviderName(m.id)).toLowerCase()))).sort();
-                    
+
                     const groqModels = byProvider('groq').sort((a, b) => a.label.localeCompare(b.label));
                     const cerebraModels = byProvider('cerebras').sort((a, b) => a.label.localeCompare(b.label));
                     const mistralModels = byProvider('mistral').sort((a, b) => a.label.localeCompare(b.label));
@@ -2350,7 +2463,7 @@ export default function HomeScreen() {
           overflowX: 'hidden',
           padding: '20px',
           paddingTop: '80px', // make room for top header
-          paddingBottom: '140px', // make room for floating input
+          paddingBottom: messages.length === 0 ? '280px' : '140px', // extra space when welcome showing
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
@@ -2360,20 +2473,24 @@ export default function HomeScreen() {
           {messages.length === 0 && !streamingText ? (
             <div style={{
               display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'flex-start',
-              paddingTop: 'calc(20vh - 60px)', // Position above the input footer
+              alignItems: 'center', justifyContent: 'center',
+              flex: 1,
+              minHeight: 0,
+              paddingBottom: '280px',
               padding: '40px 20px',
+              pointerEvents: 'none',
             }}>
               {/* Simple greeting text like ChatGPT */}
               <div style={{
                 fontSize: '32px',
-                fontWeight: '600',
+                fontWeight: '300',
                 color: theme.colors.text,
                 textAlign: 'center',
-                marginBottom: '12px',
+                marginBottom: '0px',
                 letterSpacing: '-0.02em',
+                fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
               }}>
-                How can I help you today?
+                {randomWelcomeMessage || 'How can I help you today?'}
               </div>
             </div>
           ) : (
@@ -2652,20 +2769,22 @@ export default function HomeScreen() {
         <div style={{
           position: 'absolute',
           left: 0, right: 0,
-          // When no messages: position at ~40% from top so it grows downward
+          // When no messages: position centered, just above input
           // When messages exist: anchor at bottom
           ...(messages.length === 0 ? {
-            top: '40%',
+            top: '50%',
             bottom: 'auto',
+            transform: 'translateY(-50%)',
           } : {
             top: 'auto',
             bottom: 0,
+            transform: 'translateY(0)',
           }),
           padding: '16px',
           paddingBottom: messages.length === 0 ? '16px' : 'calc(16px + env(safe-area-inset-bottom, 0px))',
           background: 'transparent',
           pointerEvents: 'none', // allow messages to scroll beneath, inner card will enable interactions
-          transition: 'top 0.3s ease, bottom 0.3s ease',
+          transition: 'top 0.3s ease, bottom 0.3s ease, transform 0.3s ease',
         }}>
 
           <div style={{ maxWidth: '920px', margin: '0 auto', pointerEvents: 'auto' }}>
@@ -2830,231 +2949,231 @@ export default function HomeScreen() {
 
               // Rectangular mode - multiline input
               return (
-            <div style={{
-              background: 'rgb(48, 48, 48)',
-              border: '1px solid #444444',
-              borderRadius: '16px',
-              padding: '12px',
-              boxShadow: '0 0 10px rgba(0,0,0,0.2)',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-            }}>
-              {/* Attachments preview area */}
-              {(attachedImages.length > 0 || attachedPDFs.length > 0) && (
                 <div style={{
+                  background: 'rgb(48, 48, 48)',
+                  border: '1px solid #444444',
+                  borderRadius: '16px',
+                  padding: '12px',
+                  boxShadow: '0 0 10px rgba(0,0,0,0.2)',
+                  transition: 'all 0.2s ease',
                   display: 'flex',
-                  gap: '10px',
-                  overflowX: 'auto',
-                  paddingBottom: '8px',
+                  flexDirection: 'column',
+                  gap: '8px',
                 }}>
-                  {attachedImages.map((img, index) => (
-                    <div key={index} style={{ position: 'relative', width: '60px', height: '60px', flexShrink: 0 }}>
-                      <img src={img.dataUrl} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${theme.colors.border}` }} />
-                      <button
-                        onClick={() => clearAttachment('image', index)}
-                        style={{
-                          position: 'absolute', top: -6, right: -6, width: '20px', height: '20px', borderRadius: '50%',
-                          background: 'rgba(0,0,0,0.8)', border: `1px solid ${theme.colors.border}`, color: '#fff',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
-                        }}
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-                  {attachedPDFs.map((pdf, index) => (
-                    <div key={index} style={{
-                      position: 'relative', width: '160px', height: '60px', flexShrink: 0,
-                      background: 'rgba(255,255,255,0.05)', border: `1px solid ${theme.colors.border}`, borderRadius: '8px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '0 8px'
+                  {/* Attachments preview area */}
+                  {(attachedImages.length > 0 || attachedPDFs.length > 0) && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '10px',
+                      overflowX: 'auto',
+                      paddingBottom: '8px',
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
-                        <FileText size={16} color={theme.colors.textSecondary} />
-                        <div style={{ fontSize: '12px', color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {pdf.name}
+                      {attachedImages.map((img, index) => (
+                        <div key={index} style={{ position: 'relative', width: '60px', height: '60px', flexShrink: 0 }}>
+                          <img src={img.dataUrl} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${theme.colors.border}` }} />
+                          <button
+                            onClick={() => clearAttachment('image', index)}
+                            style={{
+                              position: 'absolute', top: -6, right: -6, width: '20px', height: '20px', borderRadius: '50%',
+                              background: 'rgba(0,0,0,0.8)', border: `1px solid ${theme.colors.border}`, color: '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
                         </div>
-                      </div>
-                      <button
-                        onClick={() => clearAttachment('pdf', index)}
-                        style={{
-                          position: 'absolute', top: -6, right: -6, width: '20px', height: '20px', borderRadius: '50%',
-                          background: 'rgba(255,255,255,0.14)',
-                          border: `1px solid ${theme.colors.border}`,
-                          color: theme.colors.text,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: 0,
-                        }}
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Textarea */}
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  const newValue = e.target.value;
-                  setInput(newValue);
-                  const ta = e.currentTarget;
-                  ta.style.height = 'auto';
-                  const scrollH = ta.scrollHeight;
-                  const newHeight = Math.min(160, Math.max(38, scrollH));
-                  ta.style.height = newHeight + 'px';
-                  
-                  // Switch back to pill mode if there are no newlines
-                  // The pill textarea will handle overflow with text-overflow
-                  if (!newValue.includes('\n')) {
-                    setInputHeight(40); // Reset to pill mode
-                  } else {
-                    setInputHeight(newHeight);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder="Ask anything"
-                disabled={sending}
-                style={{
-                  width: '100%',
-                  minHeight: '38px',
-                  maxHeight: '160px',
-                  padding: '8px 0',
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#fff',
-                  fontSize: '16px',
-                  fontFamily: 'ui-sans-serif, sans-serif',
-                  resize: 'none',
-                  outline: 'none',
-                  lineHeight: '1.5',
-                }}
-              />
-
-              {/* Bottom Controls Row */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                {/* Left Controls: Attachment & Auto */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {/* Attachment button with menu */}
-                  <div style={{ position: 'relative' }}>
-                    <input type="file" id="image-picker-rect" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImagePick} />
-                    <input type="file" id="pdf-picker-rect" accept=".pdf,application/pdf" multiple style={{ display: 'none' }} onChange={handlePDFPick} />
-                    <button
-                      onClick={() => setShowAttachMenu(!showAttachMenu)}
-                      title="Attach files"
-                      style={{
-                        width: '38px',
-                        height: '38px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderRadius: '50%',
-                        color: theme.colors.textSecondary,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s ease',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
-                      onMouseLeave={(e) => e.currentTarget.style.color = theme.colors.textSecondary}
-                    >
-                      <Plus size={24} />
-                    </button>
-                    {/* Attachment menu */}
-                    {showAttachMenu && (
-                      <>
-                        <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setShowAttachMenu(false)} />
-                        <div style={{
-                          position: 'absolute', bottom: '48px', left: 0, minWidth: '200px',
-                          background: '#2a2a2a', border: `1px solid ${theme.colors.border}`, borderRadius: '12px',
-                          padding: '8px', zIndex: 1500, boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+                      ))}
+                      {attachedPDFs.map((pdf, index) => (
+                        <div key={index} style={{
+                          position: 'relative', width: '160px', height: '60px', flexShrink: 0,
+                          background: 'rgba(255,255,255,0.05)', border: `1px solid ${theme.colors.border}`, borderRadius: '8px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '0 8px'
                         }}>
-                          <button onClick={() => { document.getElementById('image-picker-rect')?.click(); setShowAttachMenu(false); }}
-                            style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', color: theme.colors.text, textAlign: 'left', cursor: 'pointer', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                            <FileText size={16} color={theme.colors.textSecondary} />
+                            <div style={{ fontSize: '12px', color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {pdf.name}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => clearAttachment('pdf', index)}
+                            style={{
+                              position: 'absolute', top: -6, right: -6, width: '20px', height: '20px', borderRadius: '50%',
+                              background: 'rgba(255,255,255,0.14)',
+                              border: `1px solid ${theme.colors.border}`,
+                              color: theme.colors.text,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0,
+                            }}
                           >
-                            <ImageIcon size={18} /> Add Images
-                          </button>
-                          <button onClick={() => { document.getElementById('pdf-picker-rect')?.click(); setShowAttachMenu(false); }}
-                            style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', color: theme.colors.text, textAlign: 'left', cursor: 'pointer', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                          >
-                            <FileText size={18} /> Add PDFs
+                            <X size={12} />
                           </button>
                         </div>
-                      </>
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  )}
 
-                  {/* Auto-switch toggle */}
-                  <button
-                    onClick={() => {
-                      const newValue = !autoSwitch;
-                      setAutoSwitch(newValue);
-                      setAutoSwitchEnabled(newValue);
+                  {/* Textarea */}
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setInput(newValue);
+                      const ta = e.currentTarget;
+                      ta.style.height = 'auto';
+                      const scrollH = ta.scrollHeight;
+                      const newHeight = Math.min(160, Math.max(38, scrollH));
+                      ta.style.height = newHeight + 'px';
+
+                      // Switch back to pill mode if there are no newlines
+                      // The pill textarea will handle overflow with text-overflow
+                      if (!newValue.includes('\n')) {
+                        setInputHeight(40); // Reset to pill mode
+                      } else {
+                        setInputHeight(newHeight);
+                      }
                     }}
-                    title={autoSwitch ? "Auto-switch: ON" : "Auto-switch: OFF"}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    placeholder="Ask anything"
+                    disabled={sending}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 4, padding: '0 12px', height: '38px',
-                      background: 'transparent', border: 'none', borderRadius: '19px',
-                      color: autoSwitch ? '#10b981' : theme.colors.textSecondary,
-                      fontSize: 13, cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <Zap size={16} fill={autoSwitch ? '#10b981' : 'none'} />
-                    <span>Auto</span>
-                  </button>
-                </div>
-
-                {/* Right Controls: Reasoning & Send */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {isReasoningSelected && (
-                    <button onClick={() => setShowReasoningMenu(v => !v)} title="Reasoning level"
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', height: '38px',
-                        background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '19px',
-                        color: theme.colors.textSecondary, fontSize: 12, cursor: 'pointer'
-                      }}>
-                      <span style={{ width: 6, height: 6, borderRadius: 999, background: theme.colors.primary, display: 'inline-block' }} />
-                      <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{reasoningLevel}</span>
-                    </button>
-                  )}
-
-                  {sending ? (
-                    <button onClick={handleStopGeneration} style={{
-                      width: '38px', height: '38px', borderRadius: '50%', background: theme.colors.text, border: 'none',
-                      color: theme.colors.background, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-                    }}>
-                      <Square size={14} fill="currentColor" />
-                    </button>
-                  ) : (
-                    <button onClick={handleSend} disabled={!input.trim()} style={{
-                      width: '38px', height: '38px', borderRadius: '50%',
-                      background: input.trim() ? '#fff' : 'rgba(255,255,255,0.1)',
+                      width: '100%',
+                      minHeight: '38px',
+                      maxHeight: '160px',
+                      padding: '8px 0',
+                      background: 'transparent',
                       border: 'none',
-                      color: input.trim() ? '#000' : 'rgba(255,255,255,0.4)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'not-allowed',
-                      transition: 'all 0.2s ease'
-                    }}>
-                      <ArrowUp size={18} strokeWidth={3} />
-                    </button>
-                  )}
+                      color: '#fff',
+                      fontSize: '16px',
+                      fontFamily: 'ui-sans-serif, sans-serif',
+                      resize: 'none',
+                      outline: 'none',
+                      lineHeight: '1.5',
+                    }}
+                  />
+
+                  {/* Bottom Controls Row */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    {/* Left Controls: Attachment & Auto */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {/* Attachment button with menu */}
+                      <div style={{ position: 'relative' }}>
+                        <input type="file" id="image-picker-rect" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImagePick} />
+                        <input type="file" id="pdf-picker-rect" accept=".pdf,application/pdf" multiple style={{ display: 'none' }} onChange={handlePDFPick} />
+                        <button
+                          onClick={() => setShowAttachMenu(!showAttachMenu)}
+                          title="Attach files"
+                          style={{
+                            width: '38px',
+                            height: '38px',
+                            background: 'transparent',
+                            border: 'none',
+                            borderRadius: '50%',
+                            color: theme.colors.textSecondary,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
+                          onMouseLeave={(e) => e.currentTarget.style.color = theme.colors.textSecondary}
+                        >
+                          <Plus size={24} />
+                        </button>
+                        {/* Attachment menu */}
+                        {showAttachMenu && (
+                          <>
+                            <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setShowAttachMenu(false)} />
+                            <div style={{
+                              position: 'absolute', bottom: '48px', left: 0, minWidth: '200px',
+                              background: '#2a2a2a', border: `1px solid ${theme.colors.border}`, borderRadius: '12px',
+                              padding: '8px', zIndex: 1500, boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+                            }}>
+                              <button onClick={() => { document.getElementById('image-picker-rect')?.click(); setShowAttachMenu(false); }}
+                                style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', color: theme.colors.text, textAlign: 'left', cursor: 'pointer', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <ImageIcon size={18} /> Add Images
+                              </button>
+                              <button onClick={() => { document.getElementById('pdf-picker-rect')?.click(); setShowAttachMenu(false); }}
+                                style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', color: theme.colors.text, textAlign: 'left', cursor: 'pointer', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <FileText size={18} /> Add PDFs
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Auto-switch toggle */}
+                      <button
+                        onClick={() => {
+                          const newValue = !autoSwitch;
+                          setAutoSwitch(newValue);
+                          setAutoSwitchEnabled(newValue);
+                        }}
+                        title={autoSwitch ? "Auto-switch: ON" : "Auto-switch: OFF"}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4, padding: '0 12px', height: '38px',
+                          background: 'transparent', border: 'none', borderRadius: '19px',
+                          color: autoSwitch ? '#10b981' : theme.colors.textSecondary,
+                          fontSize: 13, cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <Zap size={16} fill={autoSwitch ? '#10b981' : 'none'} />
+                        <span>Auto</span>
+                      </button>
+                    </div>
+
+                    {/* Right Controls: Reasoning & Send */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {isReasoningSelected && (
+                        <button onClick={() => setShowReasoningMenu(v => !v)} title="Reasoning level"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', height: '38px',
+                            background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '19px',
+                            color: theme.colors.textSecondary, fontSize: 12, cursor: 'pointer'
+                          }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 999, background: theme.colors.primary, display: 'inline-block' }} />
+                          <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{reasoningLevel}</span>
+                        </button>
+                      )}
+
+                      {sending ? (
+                        <button onClick={handleStopGeneration} style={{
+                          width: '38px', height: '38px', borderRadius: '50%', background: theme.colors.text, border: 'none',
+                          color: theme.colors.background, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                        }}>
+                          <Square size={14} fill="currentColor" />
+                        </button>
+                      ) : (
+                        <button onClick={handleSend} disabled={!input.trim()} style={{
+                          width: '38px', height: '38px', borderRadius: '50%',
+                          background: input.trim() ? '#fff' : 'rgba(255,255,255,0.1)',
+                          border: 'none',
+                          color: input.trim() ? '#000' : 'rgba(255,255,255,0.4)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'not-allowed',
+                          transition: 'all 0.2s ease'
+                        }}>
+                          <ArrowUp size={18} strokeWidth={3} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
               );
             })()}
           </div>
@@ -3105,7 +3224,11 @@ export default function HomeScreen() {
         }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0); border-radius: 4px; transition: background 0.3s ease; }
+        div:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); }
+        scrollbar-color: transparent transparent;
+        * { scrollbar-color: transparent transparent; }
+        *:hover { scrollbar-color: rgba(255, 255, 255, 0.3) transparent; }
       `}</style>
 
       {/* Mobile App QR Modal */}
@@ -3293,7 +3416,7 @@ export default function HomeScreen() {
             }}
             onClick={() => {
               setShowSettingsModal(false);
-              setShowToneModal(false);
+              setShowPersonalityModal(false);
               setSelectedSettingsPage('overview');
             }}
           >
@@ -3331,6 +3454,7 @@ export default function HomeScreen() {
               <button
                 onClick={() => {
                   setShowSettingsModal(false);
+                  setShowPersonalityModal(false);
                   setSelectedSettingsPage('overview');
                 }}
                 style={{
@@ -3442,7 +3566,7 @@ export default function HomeScreen() {
                         try {
                           await auth.signOut();
                           setShowSettingsModal(false);
-                          setShowToneModal(false);
+                          setShowPersonalityModal(false);
                           navigate('/login');
                         } catch (error) {
                           console.error('Sign out error:', error);
@@ -3537,15 +3661,16 @@ export default function HomeScreen() {
                     overflowY: 'auto',
                     padding: '0',
                   }}
-                  onScroll={() => {
-                    setIsSettingsScrolling(true);
-                    if (settingsScrollTimeoutRef.current) {
-                      clearTimeout(settingsScrollTimeoutRef.current);
-                    }
-                    settingsScrollTimeoutRef.current = setTimeout(() => {
-                      setIsSettingsScrolling(false);
-                    }, 1500);
-                  }}>
+                    onScroll={() => {
+                      setShowPersonalityModal(false);
+                      setIsSettingsScrolling(true);
+                      if (settingsScrollTimeoutRef.current) {
+                        clearTimeout(settingsScrollTimeoutRef.current);
+                      }
+                      settingsScrollTimeoutRef.current = setTimeout(() => {
+                        setIsSettingsScrolling(false);
+                      }, 1500);
+                    }}>
                     {selectedSettingsPage === 'overview' && (
                       <div>
                         <div style={{
@@ -3874,14 +3999,15 @@ export default function HomeScreen() {
                             </div>
 
                             {/* AI Personality */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', justifyContent: 'space-between', width: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', justifyContent: 'space-between', width: '100%' }} onClick={() => { if (showPersonalityModal) setShowPersonalityModal(false); }}>
                               <div style={{ flex: 1, marginBottom: 0 }}>
                                 <div style={{ color: '#e5e7eb', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Base style and tone</div>
                                 <div style={{ color: '#888888', fontSize: 12 }}>Set the style and tone of how ChatGPT responds to you. This doesn't impact ChatGPT's capabilities.</div>
                               </div>
                               <button
                                 ref={personalityButtonRef}
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setShowPersonalityModal(!showPersonalityModal);
                                 }}
                                 style={{
@@ -3900,11 +4026,11 @@ export default function HomeScreen() {
                                   transition: 'background 0.2s ease, border 0.2s ease',
                                   gap: 0,
                                 }}
-                                onMouseEnter={(e) => { 
+                                onMouseEnter={(e) => {
                                   e.currentTarget.style.background = 'rgb(66, 66, 66)';
                                   e.currentTarget.style.border = '1px solid rgb(78, 78, 78)';
                                 }}
-                                onMouseLeave={(e) => { 
+                                onMouseLeave={(e) => {
                                   e.currentTarget.style.background = 'transparent';
                                   e.currentTarget.style.border = 'none';
                                 }}
