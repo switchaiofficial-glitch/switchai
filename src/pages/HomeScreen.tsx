@@ -4,6 +4,7 @@ import Lottie from 'lottie-react';
 import { Archive, ArrowUp, BarChart3, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, Code, Coins, Copy, Database, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Info, Lightbulb, Lightbulb as LightbulbIcon, LogOut, Mail, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Rocket, School, Search, Server, Settings, Share2, Smartphone, Sparkles, Square, Star, Trash2, TrendingDown, TrendingUp, Wand2, X, Zap } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import React, { useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from '../components/Markdown';
 import { buildMemorySystemPrompt, initMemoryDocument, maybeStoreFromUserMessage } from '../lib/aiMemoryService';
@@ -212,6 +213,7 @@ export default function HomeScreen() {
   const [user, setUser] = useState<any>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [modelPickerPos, setModelPickerPos] = useState({ top: 0, left: 0 });
   const [reasoningLevel, setReasoningLevel] = useState<'low' | 'medium' | 'high'>(() => {
     const saved = localStorage.getItem('reasoningLevel');
     return (saved === 'low' || saved === 'medium' || saved === 'high') ? saved : 'medium';
@@ -245,6 +247,13 @@ export default function HomeScreen() {
   // Settings modal state
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [selectedSettingsPage, setSelectedSettingsPage] = useState<string>('overview');
+  const [isSettingsScrolling, setIsSettingsScrolling] = useState(false);
+  const settingsScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Personality modal state
+  const [showPersonalityModal, setShowPersonalityModal] = useState(false);
+  const [personalityPickerPos, setPersonalityPickerPos] = useState({ top: 0, left: 0 });
+  const personalityButtonRef = useRef<HTMLButtonElement>(null);
 
   // Settings data state
   const [tokenData, setTokenData] = useState<UserTokenData | null>(null);
@@ -338,6 +347,7 @@ export default function HomeScreen() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const modelPickerButtonRef = useRef<HTMLButtonElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamBufferRef = useRef<string>('');
   const lastUpdateRef = useRef<number>(0);
@@ -445,6 +455,19 @@ export default function HomeScreen() {
     }
   }, [showSettingsModal, selectedSettingsPage]);
 
+  // Handle Escape key for personality modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showPersonalityModal) {
+        setShowPersonalityModal(false);
+      }
+    };
+    if (showPersonalityModal) {
+      window.addEventListener('keydown', handleEscape);
+      return () => window.removeEventListener('keydown', handleEscape);
+    }
+  }, [showPersonalityModal]);
+
   // Save training preference
   useEffect(() => {
     localStorage.setItem('useDataForTraining', useForTraining ? '1' : '0');
@@ -486,6 +509,28 @@ export default function HomeScreen() {
   useEffect(() => {
     localStorage.setItem('userMoreAboutYou', moreAboutYou);
   }, [moreAboutYou]);
+
+  // Handle Escape key to close model picker
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showModelPicker) {
+        setShowModelPicker(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showModelPicker]);
+
+  // Update model picker position when it opens
+  useEffect(() => {
+    if (showModelPicker && modelPickerButtonRef.current) {
+      const rect = modelPickerButtonRef.current.getBoundingClientRect();
+      setModelPickerPos({
+        top: rect.bottom + 8,
+        left: rect.left
+      });
+    }
+  }, [showModelPicker]);
 
   // Clear contextual prompts when input changes significantly
   useEffect(() => {
@@ -1670,7 +1715,7 @@ export default function HomeScreen() {
       maxWidth: '100vw',
       background: theme.colors.background,
       color: theme.colors.text,
-      fontFamily: 'Varela Round, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       overflow: 'hidden',
       overscrollBehavior: 'none',
       position: 'relative',
@@ -1973,16 +2018,16 @@ export default function HomeScreen() {
                       onClick={() => loadChat(chat.id)}
                       style={{
                         position: 'relative',
-                        padding: '7px 12px', borderRadius: '12px', cursor: 'pointer', marginBottom: '0px',
-                        background: currentChatId === chat.id
-                          ? 'rgba(255, 255, 255, 0.08)'
-                          : (hoveredChatId === chat.id ? 'rgb(48, 48, 48)' : 'transparent'),
+                        padding: '4px 12px', borderRadius: '12px', cursor: 'pointer', marginBottom: '2px',
+                        background: (currentChatId === chat.id || hoveredChatId === chat.id)
+                          ? 'rgba(255, 255, 255, 0.06)'
+                          : 'transparent',
                         border: currentChatId === chat.id ? `1px solid ${theme.colors.borderLight}` : '1px solid transparent',
-                        display: 'flex', alignItems: 'center', gap: '10px',
+                        display: 'flex', alignItems: 'center', gap: '6px',
                       }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: theme.colors.text, fontSize: '18px', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ color: theme.colors.text, fontSize: '14px', fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {chat.title}
                         </div>
 
@@ -2123,7 +2168,7 @@ export default function HomeScreen() {
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.color = theme.colors.primary;
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                      e.currentTarget.style.background = 'transparent';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.color = theme.colors.textMuted;
@@ -2151,7 +2196,7 @@ export default function HomeScreen() {
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.color = theme.colors.primary;
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                      e.currentTarget.style.background = 'transparent';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.color = theme.colors.textMuted;
@@ -2188,49 +2233,39 @@ export default function HomeScreen() {
           zIndex: 10,
           display: 'flex',
           alignItems: 'center',
-          padding: '0 20px',
-          gap: '12px',
+          padding: '0 12px',
+          gap: '4px',
           background: 'linear-gradient(180deg, rgba(33, 33, 33, 0.95) 0%, rgba(33, 33, 33, 0.7) 70%, transparent 100%)',
           backdropFilter: 'blur(8px)',
         }}>
           {/* Model Selector */}
           <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowModelPicker(!showModelPicker)} style={{
-              display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px',
-              background: 'rgba(255, 255, 255, 0.08)', border: `1.5px solid rgba(255,255,255,0.12)`,
-              borderRadius: '14px', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer',
-              transition: 'all 0.2s ease',
+            <button ref={modelPickerButtonRef} onClick={() => setShowModelPicker(!showModelPicker)} style={{
+              display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px',
+              background: 'transparent', border: 'none',
+              borderRadius: '14px', color: '#fff', fontSize: '18px', fontWeight: '400', cursor: 'pointer',
+              transition: 'background 0.2s ease',
               maxWidth: '280px',
             }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                e.currentTarget.style.background = 'rgb(66, 66, 66)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.background = 'transparent';
               }}
             >
-              <Sparkles size={16} />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {selectedModelObj?.label || 'Select Model'}
               </span>
-              <ChevronDown size={14} />
+              <ChevronDown size={16} />
             </button>
 
-            {showModelPicker && (
+            {showModelPicker && ReactDOM.createPortal(
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowModelPicker(false)} />
-                <div style={{ position: 'absolute', top: '48px', left: 0, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: 'rgba(15, 15, 15, 0.98)', border: `1.5px solid rgba(255,255,255,0.15)`, borderRadius: '20px', padding: '14px', zIndex: 1500, boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)' }}>
-                  <div style={{ padding: '12px 8px 12px', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: '12px' }}>
-                    <div style={{ fontSize: '18px', fontWeight: '700', color: theme.colors.text, marginBottom: '6px', letterSpacing: '-0.02em' }}>Choose Model</div>
-                    <div style={{ fontSize: '13px', color: theme.colors.textSecondary }}>{models.length} models available</div>
-                  </div>
+                <div style={{ position: 'fixed', top: `${modelPickerPos.top}px`, left: `${modelPickerPos.left}px`, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: 'rgb(53, 53, 53)', border: 'none', borderRadius: '20px', padding: '0', zIndex: 1500, boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)', scrollbarWidth: 'none' }} onClick={(e) => e.stopPropagation()}>
                   {(() => {
                     const favoritesSet = new Set(favoriteModels);
-                    const byProvider = (prov: string) => models.filter(m => (m.inference || 'groq').toLowerCase() === prov.toLowerCase());
-                    const favorites = models.filter(m => favoritesSet.has(m.id));
-                    const groq = byProvider('groq');
-                    const cerebras = byProvider('cerebras');
-                    const openrouter = byProvider('openrouter');
 
                     const Card = ({ model }: { model: CatalogEntry }) => {
                       const inferenceName = model.inference || 'groq';
@@ -2247,27 +2282,22 @@ export default function HomeScreen() {
                       return (
                         <div
                           onClick={() => handleModelSelect(model.id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 12px', borderRadius: '12px', cursor: 'pointer', background: selectedModel === model.id ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)', border: selectedModel === model.id ? '1.5px solid rgba(255,255,255,0.16)' : '1px solid rgba(255,255,255,0.06)', transition: 'background 0.15s ease, border-color 0.15s ease' }}
-                          onMouseEnter={(e) => { if (selectedModel !== model.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; } }}
-                          onMouseLeave={(e) => { if (selectedModel !== model.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; } }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 8px', borderRadius: '8px', cursor: 'pointer', background: 'transparent', border: 'none', transition: 'background 0.15s ease' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgb(74, 74, 74)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                         >
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '14px', fontWeight: '600', color: theme.colors.text, marginBottom: '8px', lineHeight: '1.3' }}>{model.label}</div>
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                              <span style={{ fontSize: '11px', fontWeight: '600', padding: '4px 8px', borderRadius: '8px', background: inferenceStyle.bg, color: inferenceStyle.text, border: `1px solid ${inferenceStyle.text}33`, textTransform: 'capitalize', letterSpacing: '0.02em' }}>⚡ {inferenceDisplay}</span>
-                              <span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.12)', background: 'rgba(255, 255, 255, 0.05)', color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{model.type}</span>
-                              <span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.2)' }}>{model.provider || getProviderName(model.id)}</span>
-                              {model.hasReasoning && (<span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa', border: '1px solid rgba(168, 85, 247, 0.25)' }}>💡 Reasoning</span>)}
-                              {model.supportsVision && (<span style={{ fontSize: '10px', fontWeight: '500', padding: '3px 7px', borderRadius: '6px', background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.25)' }}>👁️ Vision</span>)}
+                            <div style={{ fontSize: '14px', fontWeight: '400', color: theme.colors.text, marginBottom: '4px', lineHeight: '1.3' }}>{model.label}</div>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '11px', color: theme.colors.textSecondary }}>
+                              <span>{(model.inference || 'groq').charAt(0).toUpperCase() + (model.inference || 'groq').slice(1)}</span>
+                              <span>•</span>
+                              <span>{model.provider || getProviderName(model.id)}</span>
+                              <span>•</span>
+                              <span>{model.type}</span>
                             </div>
                           </div>
-                          <button onClick={(e) => { e.stopPropagation(); toggleFavoriteModel(model.id); }} title={isFav ? 'Remove from favorites' : 'Add to favorites'} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.06)', color: isFav ? '#facc15' : theme.colors.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
-                            <Star size={16} fill={isFav ? '#facc15' : 'transparent'} />
-                          </button>
                           {selectedModel === model.id && (
-                            <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              <Check size={12} color="#fff" strokeWidth={3} />
-                            </div>
+                            <Check size={18} color="#fff" strokeWidth={3} flexShrink={0} />
                           )}
                         </div>
                       );
@@ -2275,35 +2305,39 @@ export default function HomeScreen() {
 
                     const Section = ({ title, items }: { title: string; items: CatalogEntry[] }) => (
                       items.length === 0 ? null : (
-                        <div style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '.05em', margin: '8px 4px' }}>{title}</div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ marginBottom: 0 }}>
+                          <div style={{ position: 'sticky', top: 0, fontSize: 12, fontWeight: 700, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '.05em', margin: '0', padding: '8px 14px', background: 'rgb(53, 53, 53)', zIndex: 10 }}>{title}</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '0 8px' }}>
                             {items.map(m => <Card key={m.id} model={m} />)}
                           </div>
                         </div>
                       )
                     );
 
-                    const favoritesSorted = models.filter(m => favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                    const groqSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'groq' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                    const cerebrasSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'cerebras' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                    const mistralSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'mistral' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                    const googleSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'google' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
-                    const openrouterSorted = models.filter(m => (m.inference || 'groq').toLowerCase() === 'openrouter' && !favoritesSet.has(m.id)).sort((a, b) => a.label.localeCompare(b.label));
+                    const byProvider = (provider: string) => models.filter(m => (m.provider || getProviderName(m.id)).toLowerCase() === provider.toLowerCase());
+                    
+                    // Get unique providers from all models
+                    const uniqueProviders = Array.from(new Set(models.map(m => (m.provider || getProviderName(m.id)).toLowerCase()))).sort();
+                    
+                    const groqModels = byProvider('groq').sort((a, b) => a.label.localeCompare(b.label));
+                    const cerebraModels = byProvider('cerebras').sort((a, b) => a.label.localeCompare(b.label));
+                    const mistralModels = byProvider('mistral').sort((a, b) => a.label.localeCompare(b.label));
+                    const googleModels = byProvider('google').sort((a, b) => a.label.localeCompare(b.label));
+                    const openrouterModels = byProvider('openrouter').sort((a, b) => a.label.localeCompare(b.label));
 
                     return (
                       <>
-                        <Section title="Favorites" items={favoritesSorted} />
-                        <Section title="Groq" items={groqSorted} />
-                        <Section title="Cerebras" items={cerebrasSorted} />
-                        <Section title="Mistral" items={mistralSorted} />
-                        <Section title="Google" items={googleSorted} />
-                        <Section title="OpenRouter" items={openrouterSorted} />
+                        {uniqueProviders.map(provider => {
+                          const providerCapitalized = provider.charAt(0).toUpperCase() + provider.slice(1);
+                          const providerModels = byProvider(provider).sort((a, b) => a.label.localeCompare(b.label));
+                          return <Section key={provider} title={providerCapitalized} items={providerModels} />;
+                        })}
                       </>
                     );
                   })()}
                 </div>
-              </>
+              </>,
+              document.body
             )}
           </div>
         </div>
@@ -2316,7 +2350,7 @@ export default function HomeScreen() {
           overflowX: 'hidden',
           padding: '20px',
           paddingTop: '80px', // make room for top header
-          paddingBottom: '220px', // make room for floating input
+          paddingBottom: '140px', // make room for floating input
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
@@ -2327,7 +2361,7 @@ export default function HomeScreen() {
             <div style={{
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'flex-start',
-              paddingTop: 'calc(35vh - 60px)', // Position above the input footer at 40%
+              paddingTop: 'calc(20vh - 60px)', // Position above the input footer
               padding: '40px 20px',
             }}>
               {/* Simple greeting text like ChatGPT */}
@@ -2634,7 +2668,7 @@ export default function HomeScreen() {
           transition: 'top 0.3s ease, bottom 0.3s ease',
         }}>
 
-          <div style={{ maxWidth: '1040px', margin: '0 auto', pointerEvents: 'auto' }}>
+          <div style={{ maxWidth: '920px', margin: '0 auto', pointerEvents: 'auto' }}>
             {(() => {
               // Use the isPillMode computed at component level
               // Pill mode: horizontal layout (plus, auto, input, send)
@@ -2645,13 +2679,13 @@ export default function HomeScreen() {
                     background: 'rgb(48, 48, 48)',
                     border: '1px solid #444444',
                     borderRadius: '50px',
-                    padding: '10px 16px',
+                    padding: '6px 12px',
                     boxShadow: '0 0 10px rgba(0,0,0,0.2)',
                     transition: 'all 0.2s ease',
                     display: 'flex',
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: '6px',
+                    gap: '4px',
                   }}>
                     {/* Attachment button */}
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -2661,8 +2695,8 @@ export default function HomeScreen() {
                         onClick={() => setShowAttachMenu(!showAttachMenu)}
                         title="Attach files"
                         style={{
-                          width: '44px',
-                          height: '44px',
+                          width: '40px',
+                          height: '42px',
                           background: 'transparent',
                           border: 'none',
                           borderRadius: '50%',
@@ -2716,10 +2750,10 @@ export default function HomeScreen() {
                       }}
                       title={autoSwitch ? "Auto-switch: ON" : "Auto-switch: OFF"}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', height: '44px',
-                        background: 'transparent', border: 'none', borderRadius: '22px',
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', height: '36px',
+                        background: 'transparent', border: 'none', borderRadius: '18px',
                         color: autoSwitch ? '#10b981' : theme.colors.textSecondary,
-                        fontSize: 16, cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s ease',
+                        fontSize: 14, cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s ease',
                         flexShrink: 0,
                       }}
                     >
@@ -2752,18 +2786,18 @@ export default function HomeScreen() {
                       style={{
                         flex: 1,
                         minWidth: 0,
-                        height: '61px',
-                        minHeight: '61px',
-                        maxHeight: '61px',
-                        padding: '0 14px',
+                        height: '36px',
+                        minHeight: '36px',
+                        maxHeight: '36px',
+                        padding: '0 12px',
                         background: 'transparent',
                         border: 'none',
                         color: '#fff',
-                        fontSize: '18px',
-                        fontFamily: 'Varela Round, sans-serif',
+                        fontSize: '14px',
+                        fontFamily: 'ui-sans-serif, sans-serif',
                         resize: 'none',
                         outline: 'none',
-                        lineHeight: '61px',
+                        lineHeight: '36px',
                         overflow: 'hidden',
                       }}
                     />
@@ -2771,15 +2805,15 @@ export default function HomeScreen() {
                     {/* Send button */}
                     {sending ? (
                       <button onClick={handleStopGeneration} style={{
-                        width: '61px', height: '61px', borderRadius: '50%', background: theme.colors.text, border: 'none',
+                        width: '36px', height: '36px', borderRadius: '50%', background: theme.colors.text, border: 'none',
                         color: theme.colors.background, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                         flexShrink: 0,
                       }}>
-                        <Square size={18} fill="currentColor" />
+                        <Square size={14} fill="currentColor" />
                       </button>
                     ) : (
                       <button onClick={handleSend} disabled={!input.trim()} style={{
-                        width: '61px', height: '61px', borderRadius: '50%',
+                        width: '36px', height: '36px', borderRadius: '50%',
                         background: input.trim() ? '#fff' : 'rgba(255,255,255,0.1)',
                         border: 'none',
                         color: input.trim() ? '#000' : 'rgba(255,255,255,0.4)',
@@ -2787,7 +2821,7 @@ export default function HomeScreen() {
                         transition: 'all 0.2s ease',
                         flexShrink: 0,
                       }}>
-                        <ArrowUp size={22} strokeWidth={3} />
+                        <ArrowUp size={16} strokeWidth={3} />
                       </button>
                     )}
                   </div>
@@ -2901,7 +2935,7 @@ export default function HomeScreen() {
                   border: 'none',
                   color: '#fff',
                   fontSize: '16px',
-                  fontFamily: 'Varela Round, sans-serif',
+                  fontFamily: 'ui-sans-serif, sans-serif',
                   resize: 'none',
                   outline: 'none',
                   lineHeight: '1.5',
@@ -3070,8 +3104,8 @@ export default function HomeScreen() {
           50% { opacity: 1; transform: scale(1.2); }
         }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
-        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 4px; }
       `}</style>
 
       {/* Mobile App QR Modal */}
@@ -3266,9 +3300,9 @@ export default function HomeScreen() {
               onClick={(e) => e.stopPropagation()}
               style={{
                 position: 'relative',
-                width: isMobile ? '92vw' : 'max(50vw, 800px)',
+                width: isMobile ? '92vw' : '665px',
+                height: isMobile ? '80vh' : '595px',
                 maxWidth: '95vw',
-                height: '70vh',
                 background: 'rgba(10, 10, 10, 0.98)',
                 borderRadius: 20,
                 border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -3292,157 +3326,77 @@ export default function HomeScreen() {
                 zIndex: 0,
               }} />
 
-              {/* Left Sidebar - 33% */}
+              {/* Close Button - Top Left */}
+              <button
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setSelectedSettingsPage('overview');
+                }}
+                style={{
+                  position: 'absolute',
+                  top: 16,
+                  left: 16,
+                  width: 32,
+                  height: 32,
+                  borderRadius: '8px',
+                  background: 'transparent',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgb(103, 103, 103)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <X size={16} />
+              </button>
+
+              {/* Right Close Button - Top Right (Remove this old one) */}
+
+              {/* Left Sidebar - 28% */}
               <div style={{
-                width: isMobile ? '100%' : '33%',
-                background: 'rgba(0, 0, 0, 0.4)',
+                width: isMobile ? '100%' : '28%',
+                background: 'rgb(30, 30, 30)',
                 borderRight: isMobile ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
                 display: 'flex',
                 flexDirection: 'column',
                 position: 'relative',
                 zIndex: 1,
               }}>
-                {/* Sidebar Header */}
-                <div style={{
-                  padding: '20px',
-                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                  background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent)',
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 16,
-                  }}>
-                    <h2 style={{
-                      color: '#e5e7eb',
-                      fontSize: 18,
-                      fontWeight: 800,
-                      margin: 0,
-                      letterSpacing: '0.3px',
-                    }}>
-                      Settings
-                    </h2>
-                    <button
-                      onClick={() => {
-                        setShowSettingsModal(false);
-                        setSelectedSettingsPage('overview');
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        color: '#fff',
-                        transition: 'all 0.2s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                      }}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-
-                  {/* Profile Card */}
-                  <div style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    borderRadius: 12,
-                    padding: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    border: '1px solid rgba(255, 255, 255, 0.06)',
-                  }}>
-                    <div style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      background: '#1f2937',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
-                      flexShrink: 0,
-                    }}>
-                      {user?.photoURL && !avatarError ? (
-                        <img
-                          src={user.photoURL}
-                          alt={user?.displayName || 'User'}
-                          onError={() => setAvatarError(true)}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <span style={{ color: '#e5e7eb', fontWeight: 800, fontSize: 14 }}>
-                          {(user?.displayName || 'U')
-                            .split(' ')
-                            .filter(Boolean)
-                            .map((s: string) => s[0])
-                            .slice(0, 2)
-                            .join('')
-                            .toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        color: '#e5e7eb',
-                        fontWeight: 700,
-                        fontSize: 13,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {user?.displayName || 'User'}
-                      </div>
-                      <div style={{
-                        color: '#94a3b8',
-                        fontSize: 11,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {user?.email || 'Not signed in'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sidebar Navigation */}
+                {/* Sidebar Navigation - No Header */}
                 <div style={{
                   flex: 1,
                   overflowY: 'auto',
-                  padding: '12px',
+                  padding: '60px 12px 12px 12px',
                 }}>
                   {/* Navigation Items */}
                   {[
-                    { id: 'overview', icon: <Settings size={16} />, label: 'Overview', subtitle: 'General settings' },
-                    { id: 'personalization', icon: <Brain size={16} />, label: 'Personalization', subtitle: 'Models & preferences' },
-                    { id: 'data-controls', icon: <Database size={16} />, label: 'Data Controls', subtitle: 'Privacy settings' },
-                    { id: 'tokens', icon: <Rocket size={16} />, label: 'Tokens', subtitle: 'Balance & rewards' },
-                    { id: 'dedicated-inference', icon: <Rocket size={16} />, label: 'Dedicated Inference', subtitle: 'API keys' },
-                    { id: 'status', icon: <Server size={16} />, label: 'Server Status', subtitle: 'Infrastructure' },
-                    { id: 'about', icon: <Info size={16} />, label: 'About', subtitle: 'App information' },
+                    { id: 'overview', icon: <Settings size={16} />, label: 'Overview' },
+                    { id: 'personalization', icon: <Brain size={16} />, label: 'Personalization' },
+                    { id: 'data-controls', icon: <Database size={16} />, label: 'Data Controls' },
+                    { id: 'tokens', icon: <Rocket size={16} />, label: 'Tokens' },
+                    { id: 'dedicated-inference', icon: <Rocket size={16} />, label: 'Dedicated Inference' },
+                    { id: 'status', icon: <Server size={16} />, label: 'Server Status' },
+                    { id: 'about', icon: <Info size={16} />, label: 'About' },
                   ].map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setSelectedSettingsPage(item.id)}
                       style={{
                         width: '100%',
-                        background: selectedSettingsPage === item.id ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                        border: selectedSettingsPage === item.id ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid transparent',
+                        background: selectedSettingsPage === item.id ? 'rgb(54, 54, 54)' : 'transparent',
+                        border: 'none',
                         borderRadius: 10,
                         padding: '10px 12px',
-                        marginBottom: 6,
+                        marginBottom: 0,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
@@ -3451,7 +3405,7 @@ export default function HomeScreen() {
                       }}
                       onMouseEnter={(e) => {
                         if (selectedSettingsPage !== item.id) {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                          e.currentTarget.style.background = 'rgb(54, 54, 54)';
                         }
                       }}
                       onMouseLeave={(e) => {
@@ -3461,7 +3415,7 @@ export default function HomeScreen() {
                       }}
                     >
                       <div style={{
-                        color: selectedSettingsPage === item.id ? '#10b981' : '#cbd5e1',
+                        color: '#cbd5e1',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -3470,28 +3424,13 @@ export default function HomeScreen() {
                       </div>
                       <div style={{ flex: 1, textAlign: 'left' }}>
                         <div style={{
-                          color: selectedSettingsPage === item.id ? '#e5e7eb' : '#cbd5e1',
-                          fontWeight: 600,
+                          color: '#cbd5e1',
+                          fontWeight: 400,
                           fontSize: 13,
                         }}>
                           {item.label}
                         </div>
-                        <div style={{
-                          color: '#94a3b8',
-                          fontSize: 10,
-                          marginTop: 2,
-                        }}>
-                          {item.subtitle}
-                        </div>
                       </div>
-                      {selectedSettingsPage === item.id && (
-                        <div style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: 3,
-                          background: '#10b981',
-                        }} />
-                      )}
                     </button>
                   ))}
 
@@ -3556,11 +3495,11 @@ export default function HomeScreen() {
                 </div>
               </div>
 
-              {/* Right Content Area - 67% */}
+              {/* Right Content Area - 72% */}
               {!isMobile && (
                 <div style={{
-                  width: '67%',
-                  background: 'rgba(0, 0, 0, 0.2)',
+                  width: '72%',
+                  background: 'rgb(33, 33, 33)',
                   display: 'flex',
                   flexDirection: 'column',
                   position: 'relative',
@@ -3570,12 +3509,12 @@ export default function HomeScreen() {
                   <div style={{
                     padding: '20px 24px',
                     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                    background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent)',
+                    background: 'transparent',
                   }}>
                     <h3 style={{
                       color: '#e5e7eb',
                       fontSize: 18,
-                      fontWeight: 800,
+                      fontWeight: 400,
                       margin: 0,
                       letterSpacing: '0.3px',
                     }}>
@@ -3594,16 +3533,28 @@ export default function HomeScreen() {
                   <div style={{
                     flex: 1,
                     overflowY: 'auto',
-                    padding: '24px',
+                    padding: '0',
+                  }}
+                  onScroll={() => {
+                    setIsSettingsScrolling(true);
+                    if (settingsScrollTimeoutRef.current) {
+                      clearTimeout(settingsScrollTimeoutRef.current);
+                    }
+                    settingsScrollTimeoutRef.current = setTimeout(() => {
+                      setIsSettingsScrolling(false);
+                    }, 1500);
                   }}>
                     {selectedSettingsPage === 'overview' && (
                       <div>
                         <div style={{
-                          background: 'rgba(255, 255, 255, 0.04)',
+                          background: 'transparent',
                           borderRadius: 14,
                           padding: 20,
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          marginBottom: 16,
+                          border: 'none',
+                          marginBottom: 0,
+                          marginLeft: '8px',
+                          marginRight: '8px',
+                          borderBottom: '1px solid rgb(44, 44, 44)',
                         }}>
                           <div style={{
                             display: 'flex',
@@ -3626,6 +3577,10 @@ export default function HomeScreen() {
                           fontSize: 13,
                           textAlign: 'center',
                           marginTop: 40,
+                          marginLeft: '8px',
+                          marginRight: '8px',
+                          paddingBottom: '24px',
+                          borderBottom: '1px solid rgb(44, 44, 44)',
                         }}>
                           Select a setting from the sidebar to view details
                         </div>
@@ -3636,22 +3591,22 @@ export default function HomeScreen() {
                       <div style={{
                         height: '100%',
                         overflow: 'auto',
-                        padding: '20px',
+                        padding: '20px 0',
                       }}>
                         {/* Personalization Page */}
                         {selectedSettingsPage === 'personalization' && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingLeft: '8px', paddingRight: '8px' }}>
                             {/* Model Preferences */}
-                            <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Models & Voice</div>
+                            <div style={{ paddingBottom: '24px', borderBottom: '1px solid rgb(44, 44, 44)' }}>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 400, marginBottom: 10 }}>Models & Voice</div>
                               <button
                                 onClick={() => {
                                   setSelectedSettingsPage('models');
                                 }}
                                 style={{
                                   width: '100%',
-                                  background: 'rgba(255, 255, 255, 0.04)',
-                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  background: 'transparent',
+                                  border: 'none',
                                   borderRadius: 10,
                                   padding: '12px 14px',
                                   cursor: 'pointer',
@@ -3661,10 +3616,10 @@ export default function HomeScreen() {
                                   transition: 'all 0.2s ease',
                                 }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                                  e.currentTarget.style.background = 'transparent';
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                                  e.currentTarget.style.background = 'transparent';
                                 }}
                               >
                                 <Brain size={18} color="#cbd5e1" />
@@ -3678,10 +3633,10 @@ export default function HomeScreen() {
 
                             {/* Reasoning Effort */}
                             <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Reasoning Effort</div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 400, marginBottom: 10 }}>Reasoning Effort</div>
                               <div style={{
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                background: 'transparent',
+                                border: 'none',
                                 borderRadius: 10,
                                 padding: 14,
                               }}>
@@ -3715,10 +3670,10 @@ export default function HomeScreen() {
 
                             {/* Settings Toggles */}
                             <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Settings</div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 400, marginBottom: 10 }}>Settings</div>
                               <div style={{
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                background: 'transparent',
+                                border: 'none',
                                 borderRadius: 10,
                                 padding: 12,
                                 display: 'flex',
@@ -3736,22 +3691,45 @@ export default function HomeScreen() {
                                     <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 13 }}>Stream Responses</div>
                                     <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Enable live token streaming</div>
                                   </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={streamingEnabled}
-                                    onChange={(e) => setStreamingEnabled(e.target.checked)}
-                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
-                                  />
+                                  <div
+                                    onClick={() => setStreamingEnabled(!streamingEnabled)}
+                                    style={{
+                                      appearance: 'none',
+                                      width: 44,
+                                      height: 24,
+                                      borderRadius: 12,
+                                      backgroundColor: streamingEnabled ? '#3b82f6' : '#374151',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      position: 'relative',
+                                      transition: 'background 0.3s ease',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      padding: '2px',
+                                      boxSizing: 'border-box',
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 20,
+                                        height: 20,
+                                        borderRadius: '50%',
+                                        backgroundColor: streamingEnabled ? '#ffffff' : '#9ca3af',
+                                        transition: 'margin-left 0.3s ease',
+                                        marginLeft: streamingEnabled ? '22px' : '0px',
+                                      }}
+                                    />
+                                  </div>
                                 </label>
                               </div>
                             </div>
 
                             {/* AI Memory */}
                             <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>SwitchAI ∞ NeuraAI</div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 400, marginBottom: 10 }}>SwitchAI ∞ NeuraAI</div>
                               <div style={{
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                background: 'transparent',
+                                border: 'none',
                                 borderRadius: 10,
                                 overflow: 'hidden',
                               }}>
@@ -3769,12 +3747,34 @@ export default function HomeScreen() {
                                       <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Remember preferences and facts</div>
                                     </div>
                                   </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={aiMemoryEnabled}
-                                    onChange={(e) => setAiMemoryEnabled(e.target.checked)}
-                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
-                                  />
+                                  <div
+                                    onClick={() => setAiMemoryEnabled(!aiMemoryEnabled)}
+                                    style={{
+                                      width: 44,
+                                      height: 24,
+                                      borderRadius: 12,
+                                      backgroundColor: aiMemoryEnabled ? '#3b82f6' : '#374151',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      position: 'relative',
+                                      transition: 'background 0.3s ease',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      padding: '2px',
+                                      boxSizing: 'border-box',
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 20,
+                                        height: 20,
+                                        borderRadius: '50%',
+                                        backgroundColor: aiMemoryEnabled ? '#ffffff' : '#9ca3af',
+                                        transition: 'margin-left 0.3s ease',
+                                        marginLeft: aiMemoryEnabled ? '22px' : '0px',
+                                      }}
+                                    />
+                                  </div>
                                 </label>
 
                                 <div style={{ height: 1, background: 'rgba(255, 255, 255, 0.06)', marginLeft: 42 }} />
@@ -3789,16 +3789,38 @@ export default function HomeScreen() {
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                     <Database size={18} color="#cbd5e1" />
                                     <div>
-                                      <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 13 }}>Enable AI Memory</div>
-                                      <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Remember preferences and facts</div>
+                                      <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: 13 }}>Search Chat History</div>
+                                      <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Provide better contextual responses</div>
                                     </div>
                                   </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={aiMemoryEnabled}
-                                    onChange={(e) => setAiMemoryEnabled(e.target.checked)}
-                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
-                                  />
+                                  <div
+                                    onClick={() => setChatHistorySearchEnabled(!chatHistorySearchEnabled)}
+                                    style={{
+                                      width: 44,
+                                      height: 24,
+                                      borderRadius: 12,
+                                      backgroundColor: chatHistorySearchEnabled ? '#3b82f6' : '#374151',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      position: 'relative',
+                                      transition: 'background 0.3s ease',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      padding: '2px',
+                                      boxSizing: 'border-box',
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 20,
+                                        height: 20,
+                                        borderRadius: '50%',
+                                        backgroundColor: chatHistorySearchEnabled ? '#ffffff' : '#9ca3af',
+                                        transition: 'margin-left 0.3s ease',
+                                        marginLeft: chatHistorySearchEnabled ? '22px' : '0px',
+                                      }}
+                                    />
+                                  </div>
                                 </label>
 
                                 <div style={{ height: 1, background: 'rgba(255, 255, 255, 0.06)', marginLeft: 42 }} />
@@ -3817,56 +3839,141 @@ export default function HomeScreen() {
                                       <div style={{ color: '#888888', fontSize: 11, marginTop: 2 }}>Provide better contextual responses</div>
                                     </div>
                                   </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={chatHistorySearchEnabled}
-                                    onChange={(e) => setChatHistorySearchEnabled(e.target.checked)}
-                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
-                                  />
+                                  <div
+                                    onClick={() => setChatHistorySearchEnabled(!chatHistorySearchEnabled)}
+                                    style={{
+                                      width: 44,
+                                      height: 24,
+                                      borderRadius: 12,
+                                      backgroundColor: chatHistorySearchEnabled ? '#3b82f6' : '#374151',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      position: 'relative',
+                                      transition: 'background 0.3s ease',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      padding: '2px',
+                                      boxSizing: 'border-box',
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 20,
+                                        height: 20,
+                                        borderRadius: '50%',
+                                        backgroundColor: chatHistorySearchEnabled ? '#ffffff' : '#9ca3af',
+                                        transition: 'margin-left 0.3s ease',
+                                        marginLeft: chatHistorySearchEnabled ? '22px' : '0px',
+                                      }}
+                                    />
+                                  </div>
                                 </label>
                               </div>
                             </div>
 
                             {/* AI Personality */}
-                            <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>AI Personality</div>
-                              <select
-                                value={personality}
-                                onChange={(e) => setPersonality(e.target.value)}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', justifyContent: 'space-between', width: '100%' }}>
+                              <div style={{ flex: 1, marginBottom: 0 }}>
+                                <div style={{ color: '#e5e7eb', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Base style and tone</div>
+                                <div style={{ color: '#888888', fontSize: 12 }}>Set the style and tone of how ChatGPT responds to you. This doesn't impact ChatGPT's capabilities.</div>
+                              </div>
+                              <button
+                                ref={personalityButtonRef}
+                                onClick={() => {
+                                  setShowPersonalityModal(!showPersonalityModal);
+                                }}
                                 style={{
-                                  width: '100%',
-                                  background: 'rgba(255, 255, 255, 0.04)',
-                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  background: 'transparent',
+                                  border: 'none',
                                   borderRadius: 10,
-                                  padding: '12px 14px',
+                                  padding: '12px 16px',
                                   color: '#e5e7eb',
                                   fontSize: 13,
                                   fontWeight: 600,
                                   cursor: 'pointer',
+                                  outline: 'none',
+                                  transition: 'background 0.2s ease, border 0.2s ease',
+                                  gap: 0,
+                                }}
+                                onMouseEnter={(e) => { 
+                                  e.currentTarget.style.background = 'rgb(66, 66, 66)';
+                                  e.currentTarget.style.border = '1px solid rgb(78, 78, 78)';
+                                }}
+                                onMouseLeave={(e) => { 
+                                  e.currentTarget.style.background = 'transparent';
+                                  e.currentTarget.style.border = 'none';
+                                }}
+                                onMouseDown={(e) => {
+                                  e.currentTarget.style.outline = 'none';
                                 }}
                               >
-                                <option value="default" style={{ background: '#1a1a1a' }}>Default - Balanced style and tone</option>
-                                <option value="professional" style={{ background: '#1a1a1a' }}>Professional - Polished and precise</option>
-                                <option value="friendly" style={{ background: '#1a1a1a' }}>Friendly - Warm and chatty</option>
-                                <option value="candid" style={{ background: '#1a1a1a' }}>Candid - Direct and encouraging</option>
-                                <option value="quirky" style={{ background: '#1a1a1a' }}>Quirky - Playful and imaginative</option>
-                                <option value="efficient" style={{ background: '#1a1a1a' }}>Efficient - Concise and plain</option>
-                                <option value="nerdy" style={{ background: '#1a1a1a' }}>Nerdy - Exploratory and enthusiastic</option>
-                                <option value="cynical" style={{ background: '#1a1a1a' }}>Cynical - Critical and sarcastic</option>
-                              </select>
+                                <span style={{ textAlign: 'left' }}>
+                                  {['default', 'professional', 'friendly', 'candid', 'quirky', 'efficient', 'nerdy', 'cynical'].find(p => p === personality) ? personality.charAt(0).toUpperCase() + personality.slice(1) : 'Default'}
+                                </span>
+                                <ChevronDown size={16} style={{ flexShrink: 0, marginLeft: 4 }} />
+                              </button>
+
+                              {showPersonalityModal && (
+                                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, minWidth: '240px', maxWidth: '280px', maxHeight: '300px', overflowY: 'auto', background: 'rgb(53, 53, 53)', border: 'none', borderRadius: '12px', padding: '4px', zIndex: 1000, boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)', scrollbarWidth: 'none' }} onClick={(e) => e.stopPropagation()}>
+                                  {[
+                                    { value: 'default', label: 'Default', desc: 'Balanced style and tone' },
+                                    { value: 'professional', label: 'Professional', desc: 'Polished and precise' },
+                                    { value: 'friendly', label: 'Friendly', desc: 'Warm and chatty' },
+                                    { value: 'candid', label: 'Candid', desc: 'Direct and encouraging' },
+                                    { value: 'quirky', label: 'Quirky', desc: 'Playful and imaginative' },
+                                    { value: 'efficient', label: 'Efficient', desc: 'Concise and plain' },
+                                    { value: 'nerdy', label: 'Nerdy', desc: 'Exploratory and enthusiastic' },
+                                    { value: 'cynical', label: 'Cynical', desc: 'Critical and sarcastic' },
+                                  ].map((p) => (
+                                    <div
+                                      key={p.value}
+                                      onClick={() => {
+                                        setPersonality(p.value);
+                                        localStorage.setItem('aiPersonality', p.value);
+                                        setShowPersonalityModal(false);
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        padding: '10px 12px',
+                                        marginBottom: '4px',
+                                        cursor: 'pointer',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        transition: 'background 0.15s ease',
+                                        gap: 8,
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgb(74, 74, 74)'; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                    >
+                                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                        <div style={{ fontSize: '13px', fontWeight: '600', color: personality === p.value ? 'rgb(164, 205, 251)' : '#e5e7eb' }}>{p.label}</div>
+                                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{p.desc}</div>
+                                      </div>
+                                      {personality === p.value && (
+                                        <Check size={16} color="rgb(164, 205, 251)" strokeWidth={3} style={{ flexShrink: 0 }} />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
 
                             {/* Custom Instructions */}
                             <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Custom Instructions</div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 400, marginBottom: 10 }}>Custom Instructions</div>
                               <textarea
                                 value={customInstruction}
                                 onChange={(e) => setCustomInstruction(e.target.value)}
                                 placeholder="How would you like SwitchAI to respond? (e.g., 'Be concise', 'Explain like I'm a beginner')"
                                 style={{
                                   width: '100%',
-                                  background: 'rgba(255, 255, 255, 0.04)',
-                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  background: 'rgb(47, 47, 47)',
+                                  border: '1px solid rgb(78, 78, 78)',
                                   borderRadius: 10,
                                   padding: '12px 14px',
                                   color: '#e5e7eb',
@@ -3874,13 +3981,14 @@ export default function HomeScreen() {
                                   resize: 'vertical',
                                   minHeight: 80,
                                   fontFamily: 'inherit',
+                                  outline: 'none',
                                 }}
                               />
                             </div>
 
                             {/* Your Nickname */}
                             <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Your Nickname</div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 400, marginBottom: 10 }}>Your Nickname</div>
                               <input
                                 type="text"
                                 value={nickname}
@@ -3888,19 +3996,20 @@ export default function HomeScreen() {
                                 placeholder="What should I call you?"
                                 style={{
                                   width: '100%',
-                                  background: 'rgba(255, 255, 255, 0.04)',
-                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  background: 'rgb(47, 47, 47)',
+                                  border: '1px solid rgb(78, 78, 78)',
                                   borderRadius: 10,
                                   padding: '12px 14px',
                                   color: '#e5e7eb',
                                   fontSize: 13,
+                                  outline: 'none',
                                 }}
                               />
                             </div>
 
                             {/* Your Occupation */}
                             <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Your Occupation</div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 400, marginBottom: 10 }}>Your Occupation</div>
                               <input
                                 type="text"
                                 value={occupation}
@@ -3908,27 +4017,28 @@ export default function HomeScreen() {
                                 placeholder="What do you do?"
                                 style={{
                                   width: '100%',
-                                  background: 'rgba(255, 255, 255, 0.04)',
-                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  background: 'rgb(47, 47, 47)',
+                                  border: '1px solid rgb(78, 78, 78)',
                                   borderRadius: 10,
                                   padding: '12px 14px',
                                   color: '#e5e7eb',
                                   fontSize: 13,
+                                  outline: 'none',
                                 }}
                               />
                             </div>
 
                             {/* More About You */}
                             <div>
-                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, marginBottom: 10 }}>More About You</div>
+                              <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 400, marginBottom: 10 }}>More About You</div>
                               <textarea
                                 value={moreAboutYou}
                                 onChange={(e) => setMoreAboutYou(e.target.value)}
                                 placeholder="Anything else I should know? (interests, preferences, etc.)"
                                 style={{
                                   width: '100%',
-                                  background: 'rgba(255, 255, 255, 0.04)',
-                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  background: 'rgb(47, 47, 47)',
+                                  border: '1px solid rgb(78, 78, 78)',
                                   borderRadius: 10,
                                   padding: '12px 14px',
                                   color: '#e5e7eb',
@@ -3960,8 +4070,8 @@ export default function HomeScreen() {
                               <div style={{
                                 flex: 1,
                                 position: 'relative',
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                background: 'transparent',
+                                border: 'none',
                                 borderRadius: 10,
                                 display: 'flex',
                                 alignItems: 'center',
@@ -3993,8 +4103,8 @@ export default function HomeScreen() {
                                   }}
                                   style={{
                                     height: '100%',
-                                    background: 'rgba(255, 255, 255, 0.04)',
-                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    background: 'transparent',
+                                    border: 'none',
                                     borderRadius: 10,
                                     padding: '0 14px',
                                     cursor: 'pointer',
@@ -4196,23 +4306,23 @@ export default function HomeScreen() {
 
                         {/* Data Controls Page */}
                         {selectedSettingsPage === 'data-controls' && (
-                          <div>
+                          <div style={{ paddingLeft: '8px', paddingRight: '8px' }}>
                             {/* Privacy Section */}
-                            <div style={{ marginBottom: 20 }}>
-                              <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Privacy</div>
+                            <div style={{ marginBottom: 20, paddingBottom: '24px', borderBottom: '1px solid rgb(44, 44, 44)' }}>
+                              <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 400, marginBottom: 12 }}>Privacy</div>
                               <label style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                background: 'transparent',
+                                border: 'none',
                                 borderRadius: 10,
                                 padding: 16,
                                 cursor: 'pointer',
                                 transition: 'all 0.2s ease',
                               }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                                  e.currentTarget.style.background = 'transparent';
                                 }}
                                 onMouseLeave={(e) => {
                                   e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
@@ -4221,21 +4331,43 @@ export default function HomeScreen() {
                                   <div style={{ color: '#ffffff', fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Use data for training</div>
                                   <div style={{ color: '#888888', fontSize: 12 }}>Allow anonymous usage to improve models</div>
                                 </div>
-                                <input
-                                  type="checkbox"
-                                  checked={useForTraining}
-                                  onChange={(e) => setUseForTraining(e.target.checked)}
-                                  style={{ width: 18, height: 18, cursor: 'pointer' }}
-                                />
+                                <div
+                                  onClick={() => setUseForTraining(!useForTraining)}
+                                  style={{
+                                    width: 44,
+                                    height: 24,
+                                    borderRadius: 12,
+                                    backgroundColor: useForTraining ? '#3b82f6' : '#374151',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    position: 'relative',
+                                    transition: 'background 0.3s ease',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    padding: '2px',
+                                    boxSizing: 'border-box',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: 20,
+                                      height: 20,
+                                      borderRadius: '50%',
+                                      backgroundColor: useForTraining ? '#ffffff' : '#9ca3af',
+                                      transition: 'margin-left 0.3s ease',
+                                      marginLeft: useForTraining ? '22px' : '0px',
+                                    }}
+                                  />
+                                </div>
                               </label>
                             </div>
 
                             {/* Danger Zone */}
                             <div>
-                              <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Danger zone</div>
+                              <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 400, marginBottom: 12 }}>Danger zone</div>
                               <div style={{
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                background: 'transparent',
+                                border: 'none',
                                 borderRadius: 10,
                                 padding: 12,
                               }}>
@@ -4307,14 +4439,16 @@ export default function HomeScreen() {
 
                         {/* Tokens Page */}
                         {selectedSettingsPage === 'tokens' && (
-                          <div>
+                          <div style={{ paddingLeft: '8px', paddingRight: '8px' }}>
                             {/* Balance Card */}
                             <div style={{
-                              background: 'rgba(255, 255, 255, 0.04)',
+                              background: 'transparent',
                               borderRadius: 14,
                               padding: 20,
                               marginBottom: 16,
-                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              paddingBottom: '24px',
+                              borderBottom: '1px solid rgb(44, 44, 44)',
+                              border: 'none',
                               position: 'relative',
                               overflow: 'hidden',
                             }}>
@@ -4330,7 +4464,7 @@ export default function HomeScreen() {
                               <div style={{ position: 'relative', zIndex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                                   <Coins size={20} color="#10b981" />
-                                  <div style={{ color: '#888888', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Your Balance</div>
+                                  <div style={{ color: '#888888', fontSize: 12, fontWeight: 400, textTransform: 'uppercase' }}>Your Balance</div>
                                 </div>
                                 <div style={{
                                   fontSize: 42,
@@ -4351,11 +4485,11 @@ export default function HomeScreen() {
                                 background: 'rgba(255,255,255,0.04)',
                                 borderRadius: 10,
                                 padding: 14,
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                border: 'none',
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                                   <TrendingUp size={16} color="#10b981" />
-                                  <div style={{ color: '#888888', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Earned</div>
+                                  <div style={{ color: '#888888', fontSize: 11, fontWeight: 400, textTransform: 'uppercase' }}>Earned</div>
                                 </div>
                                 <div style={{ fontSize: 22, fontWeight: 800, color: '#10b981' }}>
                                   {formatTokens(tokenData?.totalEarned || 0)}
@@ -4366,7 +4500,7 @@ export default function HomeScreen() {
                                 background: 'rgba(255,255,255,0.04)',
                                 borderRadius: 10,
                                 padding: 14,
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                border: 'none',
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                                   <TrendingDown size={16} color="#f59e0b" />
@@ -4381,7 +4515,7 @@ export default function HomeScreen() {
                                 background: 'rgba(255,255,255,0.04)',
                                 borderRadius: 10,
                                 padding: 14,
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                border: 'none',
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                                   <Sparkles size={16} color="#a78bfa" />
@@ -4398,14 +4532,14 @@ export default function HomeScreen() {
                               background: 'rgba(255,255,255,0.04)',
                               borderRadius: 10,
                               padding: 16,
-                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              border: 'none',
                             }}>
                               <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', marginBottom: 12 }}>Earn More Tokens</div>
                               <div style={{
                                 padding: 14,
                                 background: 'rgba(255,255,255,0.02)',
                                 borderRadius: 8,
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                border: 'none',
                               }}>
                                 <div style={{ color: '#ffffff', fontWeight: 600, marginBottom: 10, fontSize: 13 }}>How to earn:</div>
                                 <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, color: '#888888', fontSize: 12 }}>
@@ -4421,11 +4555,14 @@ export default function HomeScreen() {
                         {/* Dedicated Inference Page */}
                         {selectedSettingsPage === 'dedicated-inference' && (
                           <div style={{
-                            background: 'rgba(255, 255, 255, 0.04)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            background: 'transparent',
+                            border: 'none',
                             borderRadius: 12,
                             padding: '40px 20px',
                             textAlign: 'center',
+                            marginLeft: '8px',
+                            marginRight: '8px',
+                            borderBottom: '1px solid rgb(44, 44, 44)',
                           }}>
                             <div style={{ color: '#888888', fontSize: 14 }}>
                               Dedicated inference settings coming soon.
@@ -4436,10 +4573,13 @@ export default function HomeScreen() {
                         {/* Status Page */}
                         {selectedSettingsPage === 'status' && (
                           <div style={{
-                            background: 'rgba(255, 255, 255, 0.04)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            background: 'transparent',
+                            border: 'none',
                             borderRadius: 12,
                             padding: '40px 20px',
+                            marginLeft: '24px',
+                            marginRight: '24px',
+                            borderBottom: '1px solid rgb(44, 44, 44)',
                             textAlign: 'center',
                           }}>
                             <div style={{ color: '#888888', fontSize: 14 }}>
@@ -4451,12 +4591,15 @@ export default function HomeScreen() {
                         {/* About Page */}
                         {selectedSettingsPage === 'about' && (
                           <div style={{
-                            background: 'rgba(255, 255, 255, 0.04)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            background: 'transparent',
+                            border: 'none',
                             borderRadius: 12,
                             padding: 20,
+                            marginLeft: '8px',
+                            marginRight: '8px',
+                            borderBottom: '1px solid rgb(44, 44, 44)',
                           }}>
-                            <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>About SwitchAi</div>
+                            <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 400, marginBottom: 16 }}>About SwitchAi</div>
                             <div style={{ color: '#888888', fontSize: 13, lineHeight: 1.6 }}>
                               <div style={{ marginBottom: 12 }}>
                                 <strong style={{ color: '#ffffff' }}>Version:</strong> 1.0.0
