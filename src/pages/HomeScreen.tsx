@@ -3293,6 +3293,7 @@ export default function HomeScreen() {
             }}
             onClick={() => {
               setShowSettingsModal(false);
+              setShowToneModal(false);
               setSelectedSettingsPage('overview');
             }}
           >
@@ -3441,6 +3442,7 @@ export default function HomeScreen() {
                         try {
                           await auth.signOut();
                           setShowSettingsModal(false);
+                          setShowToneModal(false);
                           navigate('/login');
                         } catch (error) {
                           console.error('Sign out error:', error);
