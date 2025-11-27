@@ -1,6 +1,6 @@
 import katex from 'katex';
 import { Brain, Check, ChevronDown, ChevronUp, Clipboard } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -60,7 +60,7 @@ const getPrettyLanguageName = (lang: string): string => {
   return prettyNames[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
 };
 
-export default function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
+const MarkdownRenderer = React.memo(({ content, className = '' }: MarkdownRendererProps) => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [reasoningOpen, setReasoningOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -154,22 +154,24 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
   // 1) Convert <think>/<reason>/<reasoning> blocks to fenced code with language 'reasoning'
   //    Handle both full tags and closing-only tags (</think>)
   // 2) Normalize LaTeX delimiters for remark-math.
-  const baseProcessed = content
-    // Handle full tags: <think>...</think>
-    .replace(/<\s*(think|reason|reasoning)\s*>[\s\n]*([\s\S]*?)[\s\n]*<\s*\/\s*(think|reason|reasoning)\s*>/gi, (_m, _o1, inner) => {
-      const cleaned = String(inner).trim();
-      return `\n\n\`\`\`reasoning\n${cleaned}\n\`\`\`\n\n`;
-    })
-    // Handle closing-only tags: </think> (treat everything before it as reasoning)
-    .replace(/^([\s\S]*?)<\s*\/\s*(think|reason|reasoning)\s*>/i, (_m, inner) => {
-      const cleaned = String(inner).trim();
-      if (cleaned) {
+  const processedContent = React.useMemo(() => {
+    const baseProcessed = content
+      // Handle full tags: <think>...</think>
+      .replace(/<\s*(think|reason|reasoning)\s*>[\s\n]*([\s\S]*?)[\s\n]*<\s*\/\s*(think|reason|reasoning)\s*>/gi, (_m, _o1, inner) => {
+        const cleaned = String(inner).trim();
         return `\n\n\`\`\`reasoning\n${cleaned}\n\`\`\`\n\n`;
-      }
-      return '';
-    })
-  let processedContent = baseProcessed;
-  if (mathLatexEnabled || katexOnlyEnabled) {
+      })
+      // Handle closing-only tags: </think> (treat everything before it as reasoning)
+      .replace(/^([\s\S]*?)<\s*\/\s*(think|reason|reasoning)\s*>/i, (_m, inner) => {
+        const cleaned = String(inner).trim();
+        if (cleaned) {
+          return `\n\n\`\`\`reasoning\n${cleaned}\n\`\`\`\n\n`;
+        }
+        return '';
+      });
+
+    if (!mathLatexEnabled && !katexOnlyEnabled) return baseProcessed;
+
     // Helper function to clean LaTeX spacing commands without breaking math commands
     const cleanLatexSpacing = (text: string) => {
       return text
@@ -184,7 +186,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
         .replace(/\\\\\s+/g, ' ');
     };
 
-    processedContent = baseProcessed
+    return baseProcessed
       // Convert \[...\] to $$...$$ for display math
       .replace(/\\\[([\s\S]{2,}?)\\\]/g, (_: any, math: string) => {
         const cleaned = cleanLatexSpacing(math).trim();
@@ -253,7 +255,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
           return `$${cleaned}$`;
         }
       });
-  }
+  }, [content, mathLatexEnabled, katexOnlyEnabled]);
 
   return (
     <div
@@ -806,4 +808,6 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
       </ReactMarkdown>
     </div>
   );
-}
+});
+
+export default MarkdownRenderer;

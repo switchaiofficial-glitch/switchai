@@ -2403,7 +2403,7 @@ export default function HomeScreen() {
             {showModelPicker && ReactDOM.createPortal(
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowModelPicker(false)} />
-                <div style={{ position: 'fixed', top: `${modelPickerPos.top}px`, left: `${modelPickerPos.left}px`, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: 'rgb(53, 53, 53)', border: 'none', borderRadius: '20px', padding: '0', zIndex: 1500, boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)', scrollbarWidth: 'none' }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ position: 'fixed', top: `${modelPickerPos.top}px`, left: `${modelPickerPos.left}px`, minWidth: '340px', maxWidth: '420px', maxHeight: '520px', overflowY: 'auto', background: 'rgb(53, 53, 53)', border: 'none', borderRadius: '20px', padding: '12px 0 0 0', zIndex: 1500, boxShadow: '0 12px 48px rgba(0, 0, 0, 0.8)', scrollbarWidth: 'none' }} onClick={(e) => e.stopPropagation()}>
                   {(() => {
                     const favoritesSet = new Set(favoriteModels);
 

@@ -37,30 +37,30 @@ function detectVisionSupport(modelId: string, explicitType?: string): boolean {
   const id = String(modelId || '').toLowerCase();
   // Check explicit type first
   if (explicitType === 'vision') return true;
-  
+
   // Known vision models
   const visionPatterns = [
     'vision', 'llava', 'pixtral', 'gpt-4-vision', 'gpt-4o', 'gpt-4-turbo',
     'gemini-1.5', 'gemini-2.0', 'gemini-pro-vision', 'claude-3',
     'qwen-vl', 'qwen2-vl'
   ];
-  
+
   return visionPatterns.some(pattern => id.includes(pattern));
 }
 
 // Detect if a model supports reasoning
 function detectReasoningSupport(modelId: string, data: FirestoreModel): boolean {
   const id = String(modelId || '').toLowerCase();
-  
+
   // Check explicit flags first
   if (data.hasReasoning || data.reasoningLevel) return true;
   if (data.type === 'reason' || data.type === 'reasoning') return true;
-  
+
   // Known reasoning models
   const reasoningPatterns = [
     'deepseek-reasoner', 'o1', 'o3', 'reasoning', 'think', 'qwq'
   ];
-  
+
   return reasoningPatterns.some(pattern => id.includes(pattern));
 }
 
@@ -73,31 +73,31 @@ function detectInferenceProvider(modelId: string, explicitInference?: string): '
       return inf as 'groq' | 'openrouter' | 'cerebras' | 'mistral' | 'google';
     }
   }
-  
+
   // Priority 2: Auto-detect based on model ID patterns (before defaulting to Groq)
   const id = String(modelId || '').toLowerCase();
-  
+
   // Cerebras models
   if (id.includes('cerebras') || id.includes('llama3.3') || id.includes('llama-3.3')) {
     return 'cerebras';
   }
-  
+
   // Mistral models (native Mistral API)
   if (id.includes('mistral') && !id.includes('mixtral')) {
     return 'mistral';
   }
-  
+
   // Google/Gemini models (native Google API via proxy)
   // These use Google's Gemini API directly, not OpenRouter
   if (id.includes('gemini')) {
     return 'google';
   }
-  
+
   // OpenRouter exclusive models - models that ONLY work on OpenRouter
   if (
-    id.includes('gpt-4') || 
+    id.includes('gpt-4') ||
     id.includes('gpt-3.5') ||
-    id.includes('claude') || 
+    id.includes('claude') ||
     id.includes('o1-') ||
     id.includes('gemma-2') ||
     id.includes('deepseek') ||
@@ -106,7 +106,7 @@ function detectInferenceProvider(modelId: string, explicitInference?: string): '
   ) {
     return 'openrouter';
   }
-  
+
   // Priority 3: If no explicit inference field exists and no pattern matched, default to 'groq'
   return 'groq';
 }
@@ -119,11 +119,11 @@ export function asCatalogEntry(input: string | FirestoreModel): CatalogEntry | n
     if (!id) return null;
     const provider = getProviderName(id);
     const inference = detectInferenceProvider(id);
-    return { 
-      id, 
-      label: id, 
-      type: 'text', 
-      provider, 
+    return {
+      id,
+      label: id,
+      type: 'text',
+      provider,
       inference,
       hasReasoning: false,
       supportsVision: detectVisionSupport(id)
@@ -133,19 +133,19 @@ export function asCatalogEntry(input: string | FirestoreModel): CatalogEntry | n
   const id = String(data.modelID || '').trim();
   const label = String(data.model || id).trim();
   const typeRaw = String(data.type || 'text').toLowerCase();
-  
+
   // Determine type
   let type: ModelType = 'text';
   if (typeRaw === 'vision') type = 'vision';
   else if (typeRaw === 'reason' || typeRaw === 'reasoning') type = 'reason';
   else if (detectVisionSupport(id, typeRaw)) type = 'vision';
   else if (detectReasoningSupport(id, data)) type = 'reason';
-  
+
   const provider = getProviderName(id);
   const inference = detectInferenceProvider(id, data.inference);
   const hasReasoning = detectReasoningSupport(id, data);
   const supportsVision = type === 'vision' || detectVisionSupport(id, typeRaw);
-  
+
   if (!id) return null;
   return { id, label, type, provider, inference, hasReasoning, supportsVision };
 }
@@ -190,7 +190,7 @@ export function getModelEntry(id: string, items: (string | FirestoreModel)[] = [
 // Get provider name from model ID
 export function getProviderName(modelId: string): string {
   const id = String(modelId || '').toLowerCase();
-  
+
   if (id.includes('gpt') || id.includes('openai')) return 'OpenAI';
   if (id.includes('moonshot')) return 'Moonshot';
   if (id.includes('gemini') || id.includes('gemma') || id.includes('google')) return 'Google';
@@ -201,6 +201,6 @@ export function getProviderName(modelId: string): string {
   if (id.includes('mistral') || id.includes('pixtral') || id.includes('mixtral')) return 'Mistral';
   if (id.includes('cerebras')) return 'Cerebras';
   if (id.includes('claude') || id.includes('anthropic')) return 'Anthropic';
-  
+
   return 'Unknown';
 }

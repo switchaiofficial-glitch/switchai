@@ -97,10 +97,10 @@ export async function streamChatCompletion({
   }
 
   const apiKey = await fetchGroqApiKey();
-  
+
   const controller = new AbortController();
   const abortSignal = signal || controller.signal;
-  
+
   // Build request body
   const requestBody: any = {
     model,
@@ -109,11 +109,11 @@ export async function streamChatCompletion({
     max_tokens,
     stream: true,
   };
-  
+
   if (reasoning !== undefined && reasoning !== null) {
     requestBody.reasoning = reasoning;
   }
-  
+
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -124,36 +124,36 @@ export async function streamChatCompletion({
     body: JSON.stringify(requestBody),
     signal: abortSignal,
   });
-  
+
   if (!res.ok || !res.body) {
     const apiError = await parseErrorResponse(res, 'Groq');
     logError(apiError, 'streamChatCompletion');
     throw apiError;
   }
-  
+
   const reader = res.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let fullText = '';
   let buffer = '';
-  
+
   try {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      
+
       const chunkStr = decoder.decode(value, { stream: true });
       buffer += chunkStr;
-      
+
       let idx;
       while ((idx = buffer.indexOf('\n')) !== -1) {
         const line = buffer.slice(0, idx).trim();
         buffer = buffer.slice(idx + 1);
-        
+
         if (!line || !line.startsWith('data:')) continue;
-        
+
         const data = line.slice(5).trim();
         if (data === '[DONE]') break;
-        
+
         try {
           const parsed = JSON.parse(data);
           const delta = parsed?.choices?.[0]?.delta?.content;
@@ -169,12 +169,12 @@ export async function streamChatCompletion({
   } finally {
     reader.releaseLock();
   }
-  
+
   // Cache the response
   if (fullText && fullText.length > 10) {
     const estimated = estimateTokensFromText(fullText);
     responseCache.set(messages, model, fullText, estimated);
-    
+
     // Log usage and consume tokens
     try {
       if (estimated > 0) {
@@ -185,22 +185,22 @@ export async function streamChatCompletion({
           totalTokens: estimated,
           userId: auth?.currentUser?.uid,
         });
-        
+
         // Consume tokens from balance
         await consumeTokens(estimated, `AI request to ${model}`, {
           provider: 'groq',
           model,
           completionTokens: estimated,
-        }).catch(() => {});
+        }).catch(() => { });
       }
     } catch (error) {
       console.error('[Groq] Error logging usage:', error);
     }
   }
-  
+
   const latency = Date.now() - startTime;
   console.log(`[Groq] Stream completed in ${latency}ms`);
-  
+
   if (onDone) onDone(fullText);
   return fullText;
 }
@@ -212,7 +212,7 @@ export async function groqChatCompletion({
   max_tokens = 8192,
 }: Omit<StreamOptions, 'onDelta' | 'onDone'>): Promise<{ content: string; usage?: any }> {
   const apiKey = await fetchGroqApiKey();
-  
+
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -227,15 +227,15 @@ export async function groqChatCompletion({
       stream: false,
     }),
   });
-  
+
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Chat completion failed: ${res.status} ${res.statusText} ${text}`);
   }
-  
+
   const data = await res.json();
   const content = data?.choices?.[0]?.message?.content || '';
   const usage = data?.usage;
-  
+
   return { content, usage };
 }

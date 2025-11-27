@@ -58,7 +58,7 @@ function capTokens(requested?: number): number {
 
 export async function cerebrasChatCompletion({ model, messages, temperature = 0.7, max_tokens = 8192, top_p = 0.8 }: CerebrasChatParams): Promise<{ content: string; usage?: any }> {
   const key = await getCerebrasKey();
-  
+
   // Call Cerebras API directly
   const url = 'https://api.cerebras.ai/v1/chat/completions';
 
@@ -66,7 +66,7 @@ export async function cerebrasChatCompletion({ model, messages, temperature = 0.
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${key}`
       },
@@ -101,9 +101,9 @@ export async function cerebrasChatCompletion({ model, messages, temperature = 0.
   }
 
   let data: any;
-  try { 
-    data = await res.json(); 
-  } catch { 
+  try {
+    data = await res.json();
+  } catch {
     throw new Error('Invalid response from Cerebras API');
   }
 
@@ -134,7 +134,7 @@ export async function cerebrasStreamCompletion({
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${key}`,
         'Accept': 'text/event-stream'
