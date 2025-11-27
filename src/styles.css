@@ -2,8 +2,8 @@
 @import 'katex/dist/katex.min.css';
 
 :root {
-  --bg-0: #000000;
-  --bg-1: rgba(10, 10, 10, 0.8);
+  --bg-0: #212121;
+  --bg-1: rgba(33, 33, 33, 0.8);
   --text: #ffffff;
   --muted: #94a3b8;
 }

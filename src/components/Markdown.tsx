@@ -64,7 +64,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [reasoningOpen, setReasoningOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // Settings from localStorage (managed in Settings page)
   let mathLatexEnabled = true;
   let katexOnlyEnabled = false;
@@ -73,7 +73,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
     const k = localStorage.getItem('katexOnlyEnabled');
     if (m != null) mathLatexEnabled = m === '1';
     if (k != null) katexOnlyEnabled = k === '1';
-  } catch {}
+  } catch { }
 
   // Post-render cleanup: remove any spacing artifacts from the DOM
   useEffect(() => {
@@ -95,7 +95,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
 
       const nodesToClean: Text[] = [];
       let node: Node | null;
-      
+
       while ((node = walker.nextNode())) {
         if (node.textContent && spacingPattern.test(node.textContent)) {
           nodesToClean.push(node as Text);
@@ -109,7 +109,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             .replace(/\/\s*\[[\d.]+[a-zA-Z]+\]/g, '')
             .replace(/\[[\d.]+(?:pt|em|cm|mm|in|ex)\]/g, '')
             .trim();
-          
+
           if (cleaned) {
             textNode.textContent = cleaned;
           } else {
@@ -256,11 +256,11 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
   }
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className={`markdown-content ${className}`} 
-      style={{ 
-        fontSize: '15px', 
+      className={`markdown-content ${className}`}
+      style={{
+        fontSize: '15px',
         lineHeight: '1.7',
         color: theme.colors.text,
         width: '100%',
@@ -274,22 +274,24 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
           // Code blocks with syntax highlighting
           code({ node, className, children, ...props }: any) {
             const match = /language-(\w+)/.exec(className || '');
-            const inline = !match;
+            const codeString = String(children).replace(/\n$/, '');
+            // Check if it's a code block: has language class OR contains newlines (multi-line)
+            const isCodeBlock = !!match || codeString.includes('\n');
+            const inline = !isCodeBlock;
             const rawLang = match ? match[1].toLowerCase() : '';
             const lang = languageMap[rawLang] || rawLang || 'text';
             const prettyLang = getPrettyLanguageName(lang);
-            const codeString = String(children).replace(/\n$/, '');
             const codeKey = `${lang}-${codeString.slice(0, 50)}`;
             const isCopied = copiedCode === codeKey;
             const isReasoning = ['reason', 'reasoning', 'thinking', 'think', 'chain', 'thoughts'].includes(rawLang);
             const isMathFence = ['math', 'latex', 'tex', 'katex'].includes(rawLang);
-            
+
             // Fenced math: render via KaTeX in display mode (only when enabled)
             if (!inline && match && isMathFence && (mathLatexEnabled || katexOnlyEnabled)) {
               let html = '';
               try {
-                html = katex.renderToString(codeString, { 
-                  displayMode: true, 
+                html = katex.renderToString(codeString, {
+                  displayMode: true,
                   throwOnError: false,
                   errorColor: '#94a3b8',
                   strict: false,
@@ -297,7 +299,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
                   output: 'html'
                 });
               } catch (e) {
-                html = `<pre style="color: #94a3b8;">${codeString.replace(/</g,'&lt;')}</pre>`;
+                html = `<pre style="color: #94a3b8;">${codeString.replace(/</g, '&lt;')}</pre>`;
               }
               return (
                 <div style={{ margin: '16px 0', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.colors.border}`, background: 'rgba(255,255,255,0.03)' }}>
@@ -353,9 +355,9 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
                       }}>
                         <Brain size={16} color={theme.colors.text} strokeWidth={2.5} />
                       </div>
-                      <strong style={{ 
-                        fontSize: 14, 
-                        letterSpacing: 0.2, 
+                      <strong style={{
+                        fontSize: 14,
+                        letterSpacing: 0.2,
                         fontWeight: '600',
                       }}>
                         Reasoning Process
@@ -375,9 +377,9 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
                     </div>
                   </button>
                   {reasoningOpen && (
-                    <div style={{ 
-                      maxHeight: 500, 
-                      overflowY: 'auto', 
+                    <div style={{
+                      maxHeight: 500,
+                      overflowY: 'auto',
                       overflowX: 'hidden',
                       background: 'rgba(0,0,0,0.2)',
                     }}>
@@ -401,8 +403,9 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
               );
             }
 
-            return !inline && match ? (
-              <div style={{ 
+            // If there's a match (language specified) or if inline prop is explicitly false, it's a code block
+            return !inline && (match || codeString.includes('\n')) ? (
+              <div style={{
                 marginBottom: '16px',
                 marginTop: '16px',
                 borderRadius: '12px',
@@ -440,10 +443,10 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
                   <button
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyCode(codeString, lang); }}
                     style={{
-                      background: isCopied 
+                      background: isCopied
                         ? 'rgba(99,102,241,0.15)'
                         : 'rgba(255, 255, 255, 0.06)',
-                      border: `1px solid ${isCopied 
+                      border: `1px solid ${isCopied
                         ? 'rgba(99,102,241,0.35)'
                         : theme.colors.border}`,
                       borderRadius: '6px',
@@ -525,11 +528,11 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
           },
           // Headings
           h1: ({ children }) => (
-            <h1 style={{ 
-              fontSize: '28px', 
-              fontWeight: '700', 
-              marginTop: '24px', 
-              marginBottom: '16px', 
+            <h1 style={{
+              fontSize: '28px',
+              fontWeight: '700',
+              marginTop: '24px',
+              marginBottom: '16px',
               color: theme.colors.text,
               borderBottom: `1px solid ${theme.colors.border}`,
               paddingBottom: '8px',
@@ -538,77 +541,79 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 style={{ 
-              fontSize: '24px', 
-              fontWeight: '600', 
-              marginTop: '20px', 
-              marginBottom: '12px', 
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: '600',
+              marginTop: '20px',
+              marginBottom: '12px',
               color: theme.colors.text,
             }}>
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 style={{ 
-              fontSize: '20px', 
-              fontWeight: '600', 
-              marginTop: '16px', 
-              marginBottom: '10px', 
+            <h3 style={{
+              fontSize: '20px',
+              fontWeight: '600',
+              marginTop: '16px',
+              marginBottom: '10px',
               color: theme.colors.text,
             }}>
               {children}
             </h3>
           ),
           h4: ({ children }) => (
-            <h4 style={{ 
-              fontSize: '18px', 
-              fontWeight: '600', 
-              marginTop: '14px', 
-              marginBottom: '8px', 
+            <h4 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              marginTop: '14px',
+              marginBottom: '8px',
               color: theme.colors.text,
             }}>
               {children}
             </h4>
           ),
           h5: ({ children }) => (
-            <h5 style={{ 
-              fontSize: '16px', 
-              fontWeight: '600', 
-              marginTop: '12px', 
-              marginBottom: '6px', 
+            <h5 style={{
+              fontSize: '16px',
+              fontWeight: '600',
+              marginTop: '12px',
+              marginBottom: '6px',
               color: theme.colors.text,
             }}>
               {children}
             </h5>
           ),
           h6: ({ children }) => (
-            <h6 style={{ 
-              fontSize: '15px', 
-              fontWeight: '600', 
-              marginTop: '10px', 
-              marginBottom: '6px', 
+            <h6 style={{
+              fontSize: '15px',
+              fontWeight: '600',
+              marginTop: '10px',
+              marginBottom: '6px',
               color: theme.colors.text,
             }}>
               {children}
             </h6>
           ),
-          
+
           // Paragraphs
           p: ({ children }) => (
-            <p style={{ 
-              marginBottom: '12px', 
+            <p style={{
+              marginTop: '0',
+              marginBottom: '0',
               color: theme.colors.text,
               lineHeight: '1.7',
+              whiteSpace: 'pre-wrap',
             }}>
               {children}
             </p>
           ),
-          
+
           // Lists
           ul: ({ children }) => (
-            <ul style={{ 
-              marginLeft: '24px', 
-              marginBottom: '12px', 
+            <ul style={{
+              marginLeft: '24px',
+              marginBottom: '12px',
               listStyleType: 'disc',
               color: theme.colors.text,
             }}>
@@ -616,8 +621,8 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             </ul>
           ),
           ol: ({ children }) => (
-            <ol style={{ 
-              marginLeft: '24px', 
+            <ol style={{
+              marginLeft: '24px',
               marginBottom: '12px',
               color: theme.colors.text,
             }}>
@@ -625,23 +630,23 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             </ol>
           ),
           li: ({ children }) => (
-            <li style={{ 
-              marginBottom: '6px', 
+            <li style={{
+              marginBottom: '6px',
               color: theme.colors.text,
               lineHeight: '1.6',
             }}>
               {children}
             </li>
           ),
-          
+
           // Links
           a: ({ href, children }) => (
-            <a 
-              href={href} 
-              target="_blank" 
+            <a
+              href={href}
+              target="_blank"
               rel="noopener noreferrer"
-              style={{ 
-                color: theme.colors.accentBlue, 
+              style={{
+                color: theme.colors.accentBlue,
                 textDecoration: 'underline',
                 fontWeight: '500',
                 transition: 'color 0.2s ease',
@@ -652,7 +657,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
               {children}
             </a>
           ),
-          
+
           // Blockquotes
           blockquote: ({ children }) => (
             <blockquote style={{
@@ -670,18 +675,18 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
               {children}
             </blockquote>
           ),
-          
+
           // Tables
           table: ({ children }) => (
-            <div style={{ 
-              overflowX: 'auto', 
+            <div style={{
+              overflowX: 'auto',
               marginBottom: '16px',
               marginTop: '16px',
               borderRadius: '8px',
               border: `1px solid ${theme.colors.border}`,
             }}>
-              <table style={{ 
-                borderCollapse: 'collapse', 
+              <table style={{
+                borderCollapse: 'collapse',
                 width: '100%',
               }}>
                 {children}
@@ -708,8 +713,8 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             </tr>
           ),
           th: ({ children }) => (
-            <th style={{ 
-              border: `1px solid ${theme.colors.border}`, 
+            <th style={{
+              border: `1px solid ${theme.colors.border}`,
               padding: '10px 14px',
               fontWeight: '600',
               textAlign: 'left',
@@ -719,27 +724,27 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             </th>
           ),
           td: ({ children }) => (
-            <td style={{ 
-              border: `1px solid ${theme.colors.border}`, 
+            <td style={{
+              border: `1px solid ${theme.colors.border}`,
               padding: '10px 14px',
               color: theme.colors.text,
             }}>
               {children}
             </td>
           ),
-          
+
           // Horizontal rules
           hr: () => (
-            <hr style={{ 
-              border: 'none', 
-              borderTop: `1px solid ${theme.colors.border}`, 
+            <hr style={{
+              border: 'none',
+              borderTop: `1px solid ${theme.colors.border}`,
               margin: '20px 0',
             }} />
           ),
-          
+
           // Strong and emphasis
           strong: ({ children }) => (
-            <strong style={{ 
+            <strong style={{
               fontWeight: '700',
               color: theme.colors.text,
             }}>
@@ -747,27 +752,27 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             </strong>
           ),
           em: ({ children }) => (
-            <em style={{ 
+            <em style={{
               fontStyle: 'italic',
               color: theme.colors.textMuted,
             }}>
               {children}
             </em>
           ),
-          
+
           // Strikethrough (GFM)
           del: ({ children }) => (
-            <del style={{ 
+            <del style={{
               textDecoration: 'line-through',
               color: theme.colors.textMuted,
             }}>
               {children}
             </del>
           ),
-          
+
           // Task lists (GFM)
           input: (props) => (
-            <input 
+            <input
               {...props}
               style={{
                 marginRight: '8px',
@@ -776,8 +781,8 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
               disabled
             />
           ),
-          
-          
+
+
           // Pre tag (wraps code blocks)
           pre: ({ children }) => (
             <div style={{ position: 'relative' }}>
