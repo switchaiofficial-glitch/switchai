@@ -217,9 +217,9 @@ body,
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #000000;
-  color: #ffffff;
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #212121;
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   position: relative;
   overflow-x: hidden;
 }
@@ -227,7 +227,7 @@ body,
 .login-home-gradient {
   position: absolute;
   inset: 0;
-  background: #000000;
+  background: transparent;
   pointer-events: none;
   z-index: 0;
 }
@@ -236,7 +236,7 @@ body,
 .login-home-geo2,
 .login-home-geo3 {
   position: absolute;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   pointer-events: none;
   z-index: 0;
 }
@@ -254,7 +254,7 @@ body,
   height: 180px;
   left: 10%;
   bottom: 20%;
-  border-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.03);
   transform: rotate(45deg);
 }
 
@@ -264,7 +264,7 @@ body,
   border-radius: 50%;
   right: 20%;
   bottom: 10%;
-  border-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.03);
 }
 
 .login-home-main {
@@ -306,15 +306,16 @@ body,
 }
 
 .login-home-title {
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-size: 4rem;
   font-weight: 400;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.04em;
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #ffffff 0%, #e5e7eb 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  line-height: 1;
+  color: #ffffff;
+  background: none;
+  -webkit-text-fill-color: #ffffff;
+  line-height: 1.1;
+  text-shadow: none;
 }
 
 .login-home-subtitle {
@@ -333,37 +334,41 @@ body,
 }
 
 .login-home-cta-btn {
-  border-radius: 1.5rem;
+  border-radius: 999px;
   overflow: hidden;
   width: 280px;
-  background: rgba(255, 255, 255, 0.06);
-  border: none;
+  background: #181818;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .login-home-cta-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  background: #f3f4f6;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .login-home-cta-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 4.5rem;
-  background: linear-gradient(135deg, #a5f3fc 0%, #67e8f9 100%);
+  height: 4rem;
+  background: #ffffff;
   padding: 0 2rem;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .login-home-cta-text {
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: 0.025em;
-  color: rgba(11, 15, 20, 0.9);
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 1.125rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: #000000;
+  text-shadow: none;
 }
 
 .login-home-cta-lottie {
@@ -371,6 +376,7 @@ body,
   height: 34px;
   margin-left: 22px;
   margin-right: -22px;
+  filter: brightness(0);
 }
 
 .login-home-features {
@@ -386,16 +392,17 @@ body,
   align-items: center;
   gap: 0.5rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #181818;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 1rem;
   min-width: 120px;
   transition: all 0.2s ease;
 }
 
 .login-home-feature:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: #2a2a2a;
   transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .login-home-feature-icon {
@@ -524,9 +531,9 @@ body,
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #000000;
-  color: #ffffff;
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #212121;
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   position: relative;
   overflow-x: hidden;
 }
@@ -534,7 +541,7 @@ body,
 .signin-gradient {
   position: absolute;
   inset: 0;
-  background: #000000;
+  background: linear-gradient(180deg, rgba(33, 33, 33, 0) 0%, rgba(0, 0, 0, 0.4) 100%);
   pointer-events: none;
   z-index: 0;
 }
@@ -543,7 +550,7 @@ body,
 .signin-geo2,
 .signin-geo3 {
   position: absolute;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   pointer-events: none;
   z-index: 0;
 }
@@ -561,7 +568,7 @@ body,
   height: 180px;
   left: 10%;
   bottom: 20%;
-  border-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.03);
   transform: rotate(45deg);
 }
 
@@ -571,7 +578,7 @@ body,
   border-radius: 50%;
   right: 20%;
   bottom: 10%;
-  border-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.03);
 }
 
 .signin-main {
@@ -584,57 +591,69 @@ body,
   justify-content: center;
 }
 
-.signin-header {
+.signin-navbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 0;
-  width: 100%;
-  max-width: 520px;
-  margin: 0 auto 2rem;
+  z-index: 10;
+}
+
+.signin-navbar-spacer {
+  width: 2.75rem;
 }
 
 .signin-back-btn {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #181818;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #94a3b8;
-  border-radius: 0.5rem;
-  width: 2.5rem;
-  height: 2.5rem;
+  border-radius: 0.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   font-size: 1.25rem;
   transition: all 0.2s ease;
+  z-index: 10;
 }
 
 .signin-back-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #2a2a2a;
   color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .signin-title {
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   color: #e5e7eb;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.125rem;
+  font-weight: 400;
   letter-spacing: 0.025em;
   margin: 0;
 }
 
-.signin-spacer {
-  width: 2.5rem;
-}
+
 
 .signin-content {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   width: 100%;
-  max-width: 520px;
+  max-width: 480px;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: 0;
   gap: 2rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  flex: 1;
 }
 
 .signin-animation {
@@ -665,6 +684,7 @@ body,
 }
 
 .signin-heading {
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   color: #ffffff;
   font-size: 1.75rem;
   font-weight: 400;
@@ -703,9 +723,7 @@ body,
 }
 
 .signin-google-btn:hover:not(:disabled) {
-  background: #f8f9fa;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #f3f4f6;
 }
 
 .signin-google-btn:disabled {
@@ -729,9 +747,11 @@ body,
 }
 
 .signin-google-text {
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-size: 1rem;
   letter-spacing: 0.025em;
   color: #000000;
+  font-weight: 400;
 }
 
 .signin-terms-row,
@@ -750,8 +770,8 @@ body,
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  min-width: 1.125rem;
-  min-height: 1.125rem;
+  min-width: 1.25rem;
+  min-height: 1.25rem;
 }
 
 .signin-checkbox-input {
@@ -763,31 +783,34 @@ body,
 }
 
 .signin-checkbox-custom {
-  width: 1.125rem;
-  height: 1.125rem;
-  border-radius: 0.25rem;
-  border: 1px solid #4b5563;
-  background: rgba(255, 255, 255, 0.04);
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 6px;
+  border: 1.5px solid #525252;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .signin-checkbox-container:hover .signin-checkbox-custom {
-  border-color: #60a5fa;
-  background: rgba(59, 130, 246, 0.1);
+  border-color: #737373;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .signin-checkbox-input:checked+.signin-checkbox-custom {
-  border-color: #60a5fa;
-  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+  background: #3b82f6;
 }
 
 .signin-checkbox-check {
   color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: bold;
+  font-size: 0.875rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .signin-terms-text {
@@ -847,13 +870,13 @@ body,
 
 .signin-modal {
   width: 100%;
-  max-width: 640px;
-  background: rgba(20, 22, 28, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 1rem;
+  max-width: 500px;
+  background: #181818;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  max-height: 90vh;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
 }
@@ -932,7 +955,7 @@ body,
 
 .signin-accept-btn:hover {
   background: #f3f4f6;
-  transform: translateY(-1px);
+  opacity: 0.9;
 }
 
 /* Responsive Design */

@@ -46,7 +46,7 @@ export default function LoginHome() {
         <div className="login-home-content">
           <div className="login-home-branding">
             <h1 className="login-home-title">SwitchAi</h1>
-            <p className="login-home-subtitle">AI-Powered Legal Intelligence</p>
+            <p className="login-home-subtitle">AI-Powered Intelligence</p>
           </div>
 
           {/* CTA Section */}

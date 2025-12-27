@@ -16,6 +16,7 @@ export interface Message {
   model?: string;
   usage?: any;
   attachments?: AttachmentData[]; // Visual attachments to display
+  pdfContext?: { filePath: string }; // For Smart Search tool on follow-up questions
 }
 
 export interface Chat {
@@ -67,11 +68,11 @@ export function createChat(title: string = 'New Chat', model?: string): Chat {
     timestamp: Date.now(),
     model,
   };
-  
+
   const chats = loadChats();
   chats.unshift(chat); // Add to beginning
   saveChats(chats);
-  
+
   return chat;
 }
 
@@ -79,7 +80,7 @@ export function createChat(title: string = 'New Chat', model?: string): Chat {
 export function updateChat(chatId: string, updates: Partial<Chat>): void {
   const chats = loadChats();
   const index = chats.findIndex(c => c.id === chatId);
-  
+
   if (index !== -1) {
     chats[index] = { ...chats[index], ...updates };
     saveChats(chats);
@@ -97,19 +98,19 @@ export function deleteChat(chatId: string): void {
 export function addMessage(chatId: string, message: Message): void {
   const chats = loadChats();
   const index = chats.findIndex(c => c.id === chatId);
-  
+
   if (index !== -1) {
     chats[index].messages.push(message);
     chats[index].timestamp = Date.now();
-    
+
     // Update last message preview
     if (message.role === 'user') {
-      const content = typeof message.content === 'string' 
-        ? message.content 
+      const content = typeof message.content === 'string'
+        ? message.content
         : message.content.find((p: any) => p.type === 'text')?.text || '';
       chats[index].lastMessage = content.slice(0, 100);
     }
-    
+
     saveChats(chats);
   }
 }
@@ -118,7 +119,7 @@ export function addMessage(chatId: string, message: Message): void {
 export function updateMessages(chatId: string, messages: Message[]): void {
   const chats = loadChats();
   const index = chats.findIndex(c => c.id === chatId);
-  
+
   if (index !== -1) {
     chats[index].messages = messages;
     chats[index].timestamp = Date.now();
@@ -130,7 +131,7 @@ export function updateMessages(chatId: string, messages: Message[]): void {
 export function toggleArchive(chatId: string): void {
   const chats = loadChats();
   const index = chats.findIndex(c => c.id === chatId);
-  
+
   if (index !== -1) {
     chats[index].archived = !chats[index].archived;
     saveChats(chats);

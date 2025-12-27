@@ -1,24 +1,32 @@
 import { auth } from '@/lib/firebase';
 import Lottie from 'lottie-react';
 import React from 'react';
+import { Toaster } from 'react-hot-toast';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import HomeScreen from './pages/HomeScreen';
 import LoginHome from './pages/LoginHome';
-import SettingsPage from './pages/Settings';
 import SignIn from './pages/SignIn';
-import AboutPage from './pages/settings/about';
-import AIMemoryPage from './pages/settings/ai-memory';
-import DataControlsPage from './pages/settings/data-controls';
-import DedicatedInferencePage from './pages/settings/dedicated-inference';
-import PersonalizationPage from './pages/settings/personalization';
-import StatusPage from './pages/settings/status';
-import TokensPage from './pages/settings/tokens';
+
 import './styles/animations.css';
+
+import MobileRedirect from './pages/MobileRedirect';
 
 export default function App() {
   const [user, setUser] = React.useState<any | null>(auth.currentUser);
   const [authLoading, setAuthLoading] = React.useState(true);
   const [appAnimation, setAppAnimation] = React.useState<any>(null);
+  const [isPhone, setIsPhone] = React.useState(false);
+
+  React.useEffect(() => {
+    // Check mobile/tablet status
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      const isMobile = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+      const isTablet = /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/.test(userAgent.toLowerCase());
+      return isMobile && !isTablet;
+    };
+    setIsPhone(checkMobile());
+  }, []);
 
   React.useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
@@ -51,6 +59,10 @@ export default function App() {
     if (user) return <Navigate to="/homescreen" replace />;
     return children;
   };
+
+  if (isPhone) {
+    return <MobileRedirect onContinue={() => setIsPhone(false)} />;
+  }
 
   // Show loading screen while determining auth state
   if (authLoading) {
@@ -145,27 +157,67 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      {/* Root redirects based on auth state */}
-      <Route path="/" element={<Navigate to={user ? '/homescreen' : '/login'} replace />} />
+    <>
+      <Routes>
+        {/* Root redirects based on auth state */}
+        <Route path="/" element={<Navigate to={user ? '/homescreen' : '/login'} replace />} />
 
-      {/* Auth flow: show only if not logged in */}
-      <Route path="/login" element={<RedirectIfAuthed><LoginHome /></RedirectIfAuthed>} />
-      <Route path="/login/signin" element={<RedirectIfAuthed><SignIn /></RedirectIfAuthed>} />
+        {/* Auth flow: show only if not logged in */}
+        <Route path="/login" element={<RedirectIfAuthed><LoginHome /></RedirectIfAuthed>} />
+        <Route path="/login/signin" element={<RedirectIfAuthed><SignIn /></RedirectIfAuthed>} />
 
-      {/* Protected area */}
-      <Route path="/homescreen" element={<RequireAuth><HomeScreen /></RequireAuth>} />
-      <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-      <Route path="/settings/tokens" element={<RequireAuth><TokensPage /></RequireAuth>} />
-      <Route path="/settings/personalization" element={<RequireAuth><PersonalizationPage /></RequireAuth>} />
-      <Route path="/settings/ai-memory" element={<RequireAuth><AIMemoryPage /></RequireAuth>} />
-      <Route path="/settings/data-controls" element={<RequireAuth><DataControlsPage /></RequireAuth>} />
-      <Route path="/settings/dedicated-inference" element={<RequireAuth><DedicatedInferencePage /></RequireAuth>} />
-      <Route path="/settings/status" element={<RequireAuth><StatusPage /></RequireAuth>} />
-      <Route path="/settings/about" element={<RequireAuth><AboutPage /></RequireAuth>} />
+        {/* Protected area */}
+        <Route path="/homescreen" element={<RequireAuth><HomeScreen /></RequireAuth>} />
 
-      {/* Fallback to appropriate entry based on auth */}
-      <Route path="*" element={<Navigate to={user ? '/homescreen' : '/login'} replace />} />
-    </Routes>
+
+        {/* Fallback to appropriate entry based on auth */}
+        <Route path="*" element={<Navigate to={user ? '/homescreen' : '/login'} replace />} />
+      </Routes>
+      <Toaster
+        position="top-right"
+        containerStyle={{
+          top: 40,
+        }}
+        toastOptions={{
+          // Default styling for all toasts
+          style: {
+            background: 'rgba(30, 30, 30, 0.95)',
+            color: '#ffffff',
+            borderRadius: '14px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            padding: '14px 18px',
+            fontSize: '14px',
+            fontWeight: 500,
+            fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+            maxWidth: '400px',
+          },
+          duration: 3000,
+          // Success toast styling
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#ffffff',
+            },
+          },
+          // Error toast styling
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#ffffff',
+            },
+          },
+          // Loading toast styling
+          loading: {
+            iconTheme: {
+              primary: '#3b82f6',
+              secondary: '#ffffff',
+            },
+          },
+        }}
+      />
+    </>
   );
 }

@@ -60,6 +60,8 @@ const getPrettyLanguageName = (lang: string): string => {
   return prettyNames[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
 };
 
+// MarkdownRenderer renders markdown with syntax highlighting and LaTeX support
+
 const MarkdownRenderer = React.memo(({ content, className = '' }: MarkdownRendererProps) => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [reasoningOpen, setReasoningOpen] = useState(false);

@@ -28,6 +28,7 @@ interface FirestoreModel {
   modelID?: string;
   type?: string;
   inference?: string;
+  provider?: string; // Provider name from Firestore (e.g., "Mistral", "Openrouter")
   reasoningLevel?: string; // presence indicates reasoning-capable (as in app)
   hasReasoning?: boolean;  // optional explicit flag
 }
@@ -141,7 +142,8 @@ export function asCatalogEntry(input: string | FirestoreModel): CatalogEntry | n
   else if (detectVisionSupport(id, typeRaw)) type = 'vision';
   else if (detectReasoningSupport(id, data)) type = 'reason';
 
-  const provider = getProviderName(id);
+  // Use provider from Firestore if available, otherwise detect from model ID
+  const provider = data.provider || getProviderName(id);
   const inference = detectInferenceProvider(id, data.inference);
   const hasReasoning = detectReasoningSupport(id, data);
   const supportsVision = type === 'vision' || detectVisionSupport(id, typeRaw);
@@ -187,7 +189,7 @@ export function getModelEntry(id: string, items: (string | FirestoreModel)[] = [
   return catalog.find(m => m.id === id);
 }
 
-// Get provider name from model ID
+// Get provider name from model ID (fallback when Firestore doesn't have provider field)
 export function getProviderName(modelId: string): string {
   const id = String(modelId || '').toLowerCase();
 
@@ -198,9 +200,18 @@ export function getProviderName(modelId: string): string {
   if (id.includes('qwen') || id.includes('alibaba')) return 'Qwen';
   if (id.includes('meta') || id.includes('llama')) return 'Meta';
   if (id.includes('groq')) return 'Groq';
-  if (id.includes('mistral') || id.includes('pixtral') || id.includes('mixtral')) return 'Mistral';
-  if (id.includes('cerebras')) return 'Cerebras';
+  // Mistral models - including Devstral and Ministral
+  if (id.includes('codestral') || id.includes('mistral') || id.includes('pixtral') || id.includes('mixtral') || id.includes('devstral') || id.includes('ministral')) return 'Mistral';
+  if (id.includes('cerebras') || id.includes('z.ai')) return 'Cerebras';
   if (id.includes('claude') || id.includes('anthropic')) return 'Anthropic';
+  if (id.includes('grok') || id.includes('x-ai')) return 'Grok';
+  // New providers
+  if (id.includes('allenai') || id.includes('allen')) return 'AllenAI';
+  if (id.includes('arceeai') || id.includes('arcee')) return 'ArceeAI';
+  if (id.includes('nvidia')) return 'Nvidia';
+  if (id.includes('sourceful')) return 'Sourceful';
+  if (id.includes('venice')) return 'Venice';
+  if (id.includes('xiaomi')) return 'Xiaomi';
 
   return 'Unknown';
 }
