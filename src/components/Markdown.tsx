@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
+import toast from 'react-hot-toast';
 import { theme } from '../theme';
 
 interface MarkdownRendererProps {
@@ -146,9 +147,25 @@ const MarkdownRenderer = React.memo(({ content, className = '' }: MarkdownRender
     try {
       await navigator.clipboard.writeText(code);
       setCopiedCode(`${lang}-${code.slice(0, 50)}`);
+      toast.success('Copied!', {
+        duration: 2000,
+        style: {
+          background: '#1a1a1a',
+          color: '#fff',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+        },
+      });
       setTimeout(() => setCopiedCode(null), 2000);
     } catch (err) {
       console.error('Failed to copy code:', err);
+      toast.error('Failed to copy', {
+        duration: 2000,
+        style: {
+          background: '#1a1a1a',
+          color: '#fff',
+          border: '1px solid rgba(255, 59, 48, 0.3)',
+        },
+      });
     }
   };
 

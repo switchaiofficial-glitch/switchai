@@ -1,6 +1,7 @@
 import { auth, firestore } from '@/lib/firebase';
 import Lottie from 'lottie-react';
 import SettingsModal from '../components/SettingsModal';
+import { TierRestrictionModal } from '../components/TierRestrictionModal';
 import { Archive, ArrowUp, BarChart3, Brain, Check, ChevronDown, ChevronRight, Code, Coins, Copy, Crown, Database, Dice5, Edit3, Eye, FileText, FileText as FileTextIcon, Image as ImageIcon, Info, Lightbulb, Lightbulb as LightbulbIcon, LogOut, Mail, MoreHorizontal, Pencil, Plus, RefreshCw, Rocket, School, Search, Server, Settings, Share2, Smartphone, Sparkles, Square, Trash2, TrendingDown, TrendingUp, Wand2, X, Zap } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -29,7 +30,7 @@ import { buildCatalog, getProviderName } from '../lib/modelCatalog';
 import { PDFService } from '../lib/pdfService';
 import rateLimiter, { retryWithBackoff } from '../lib/requestRateLimiter';
 import serverHealthMonitor, { ServerType } from '../lib/serverHealthMonitor';
-import { unifiedStreamCompletion, fetchUserTier } from '../lib/unifiedApiClient';
+import { unifiedStreamCompletion, fetchUserTier, TierRestrictionError } from '../lib/unifiedApiClient';
 import { maybeInjectUserNameContext } from '../lib/userNameContext';
 import { VivekToolsPDFService } from '../lib/vivekToolsPDFService';
 import { theme } from '../theme';
@@ -225,6 +226,9 @@ export default function HomeScreen() {
   const [renameTitle, setRenameTitle] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
   const [plan, setPlan] = useState<'free' | 'lite' | 'pro'>('free');
+  const [showTierRestrictionModal, setShowTierRestrictionModal] = useState(false);
+  const [requiredTier, setRequiredTier] = useState<'lite' | 'pro'>('pro');
+
 
   useEffect(() => {
     const loadUserPlan = async () => {
@@ -805,8 +809,26 @@ export default function HomeScreen() {
   };
 
   const handleCopyMessage = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); }
-    catch { /* no-op */ }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copied!', {
+        duration: 2000,
+        style: {
+          background: '#1a1a1a',
+          color: '#fff',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+        },
+      });
+    } catch {
+      toast.error('Failed to copy', {
+        duration: 2000,
+        style: {
+          background: '#1a1a1a',
+          color: '#fff',
+          border: '1px solid rgba(255, 59, 48, 0.3)',
+        },
+      });
+    }
   };
 
   const formatTime = (ts?: number) => {
@@ -1490,7 +1512,18 @@ export default function HomeScreen() {
 
     } catch (error: any) {
       console.error('Send error:', error);
-      if (error.name !== 'AbortError') {
+
+      // Check if it's a tier restriction error
+      if (error instanceof TierRestrictionError) {
+        // Set the required tier from the error
+        const tier = error.requiredTier?.toLowerCase();
+        if (tier === 'lite' || tier === 'pro') {
+          setRequiredTier(tier);
+        }
+        setShowTierRestrictionModal(true);
+        // Remove the last user message since we couldn't process it
+        setMessages(prev => prev.slice(0, -1));
+      } else if (error.name !== 'AbortError') {
         // Show error message
         const errorMessage: Message = {
           id: `msg_${Date.now()}_error`,
@@ -1560,6 +1593,9 @@ export default function HomeScreen() {
     setSelectedModel(modelId);
     localStorage.setItem('selectedModel', modelId);
     setShowModelPicker(false);
+    // Turn off auto mode when manually selecting a model
+    setAutoSwitchEnabled(false);
+    setAutoSwitch(false);
   };
 
   const toggleFavoriteModel = (modelId: string) => {
@@ -4090,8 +4126,15 @@ export default function HomeScreen() {
         setUseForTraining={setUseForTraining}
         auth={auth}
         appAnimation={appAnimation}
+        setAutoSwitch={setAutoSwitch}
       />
 
+      {/* Tier Restriction Modal */}
+      <TierRestrictionModal
+        isOpen={showTierRestrictionModal}
+        onClose={() => setShowTierRestrictionModal(false)}
+        requiredTier={requiredTier}
+      />
 
     </div >
   );

@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Auth } from 'firebase/auth';
 import toast from 'react-hot-toast';
 import Lottie from 'lottie-react';
+import { setAutoSwitchEnabled } from '../lib/autoModelSwitch';
 
 interface ServerStatus {
     uptime: {
@@ -140,6 +141,7 @@ interface SettingsModalProps {
     setUseForTraining: (use: boolean) => void;
     auth: Auth;
     appAnimation: any;
+    setAutoSwitch: (enabled: boolean) => void;
 }
 
 export default function SettingsModal({
@@ -181,7 +183,8 @@ export default function SettingsModal({
     useForTraining,
     setUseForTraining,
     auth,
-    appAnimation
+    appAnimation,
+    setAutoSwitch
 }: SettingsModalProps) {
     const navigate = useNavigate();
     const [showPersonalityModal, setShowPersonalityModal] = useState(false);
@@ -1408,6 +1411,9 @@ export default function SettingsModal({
                                                                                             ? selectedModels.filter(id => id !== model.id)
                                                                                             : [...selectedModels, model.id];
                                                                                         setSelectedModels(next);
+                                                                                        // Turn off auto mode when manually selecting models
+                                                                                        setAutoSwitchEnabled(false);
+                                                                                        setAutoSwitch(false);
                                                                                     }}
                                                                                     style={{
                                                                                         background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255, 255, 255, 0.04)',

@@ -1722,3 +1722,295 @@ button {
   font-weight: 800;
   letter-spacing: 0.2px;
 }
+
+/* Tier Restriction Modal - Premium Minimal Design */
+.tier-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.tier-modal {
+  position: relative;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tier-modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+}
+
+.tier-modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  transform: scale(1.05);
+}
+
+.tier-modal-close:active {
+  transform: scale(0.95);
+}
+
+.tier-modal-content {
+  padding: 52px 36px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  text-align: center;
+}
+
+.tier-modal-badge {
+  display: inline-flex;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.tier-modal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tier-modal-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.tier-modal-description {
+  font-size: 15px;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.tier-modal-divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      transparent 100%);
+  margin: 4px 0;
+}
+
+.tier-modal-message {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.tier-modal-message:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.tier-modal-message-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.tier-modal-message-text {
+  flex: 1;
+  text-align: left;
+}
+
+.tier-modal-message-text p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #e5e7eb;
+  font-weight: 400;
+}
+
+.tier-modal-message-text strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.tier-modal-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  width: 100%;
+}
+
+.tier-modal-qr-container {
+  padding: 14px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.tier-modal-qr-image {
+  display: block;
+  width: 180px;
+  height: 180px;
+  border-radius: 6px;
+}
+
+.tier-modal-qr-text {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.tier-modal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px 28px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: none;
+  text-decoration: none;
+  font-family: inherit;
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.01em;
+}
+
+.tier-modal-btn:hover {
+  background: #f3f4f6;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);
+}
+
+.tier-modal-btn:active {
+  transform: translateY(0);
+}
+
+.tier-modal-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.tier-modal-btn:hover svg {
+  transform: translateX(2px);
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .tier-modal {
+    max-width: calc(100% - 32px);
+    border-radius: 18px;
+  }
+
+  .tier-modal-content {
+    padding: 44px 28px 28px;
+    gap: 20px;
+  }
+
+  .tier-modal-badge {
+    padding: 7px 18px;
+    font-size: 10px;
+  }
+
+  .tier-modal-title {
+    font-size: 21px;
+  }
+
+  .tier-modal-description {
+    font-size: 14px;
+  }
+
+  .tier-modal-message {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .tier-modal-message-text p {
+    font-size: 13px;
+  }
+
+  .tier-modal-qr {
+    padding: 20px;
+  }
+
+  .tier-modal-qr-container {
+    padding: 12px;
+  }
+
+  .tier-modal-qr-image {
+    width: 160px;
+    height: 160px;
+  }
+
+  .tier-modal-qr-text {
+    font-size: 12px;
+  }
+
+  .tier-modal-btn {
+    padding: 14px 24px;
+    font-size: 14px;
+  }
+}

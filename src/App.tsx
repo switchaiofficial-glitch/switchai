@@ -176,7 +176,7 @@ export default function App() {
       <Toaster
         position="top-right"
         containerStyle={{
-          top: 40,
+          top: 10,
         }}
         toastOptions={{
           // Default styling for all toasts

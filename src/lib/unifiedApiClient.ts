@@ -21,6 +21,24 @@ export interface Message {
   content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 }
 
+/**
+ * Custom error for tier restrictions
+ */
+export class TierRestrictionError extends Error {
+  public readonly code: string;
+  public readonly requiredTier: string;
+  public readonly userTier: string;
+
+  constructor(message: string, code: string, requiredTier: string, userTier: string) {
+    super(message);
+    this.name = 'TierRestrictionError';
+    this.code = code;
+    this.requiredTier = requiredTier;
+    this.userTier = userTier;
+  }
+}
+
+
 export interface ChatCompletionParams {
   model: string; // Model ID or 'auto' for automatic selection
   messages: Message[];
@@ -121,8 +139,30 @@ export async function unifiedStreamCompletion({
 
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => '');
+
+    // Check for tier restriction error (403)
+    if (res.status === 403) {
+      try {
+        const errorData = JSON.parse(text);
+        if (errorData.error?.code === 'model_tier_restricted') {
+          throw new TierRestrictionError(
+            errorData.error.message || 'This model is available for pro users only',
+            errorData.error.code,
+            errorData.error.requiredTier || 'pro',
+            errorData.error.userTier || 'free'
+          );
+        }
+      } catch (e) {
+        if (e instanceof TierRestrictionError) {
+          throw e;
+        }
+        // If parsing fails, fall through to generic error
+      }
+    }
+
     throw new Error(`API request failed: ${res.status} ${text}`);
   }
+
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder('utf-8');
@@ -220,8 +260,30 @@ export async function unifiedChatCompletion({
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+
+    // Check for tier restriction error (403)
+    if (res.status === 403) {
+      try {
+        const errorData = JSON.parse(text);
+        if (errorData.error?.code === 'model_tier_restricted') {
+          throw new TierRestrictionError(
+            errorData.error.message || 'This model is available for pro users only',
+            errorData.error.code,
+            errorData.error.requiredTier || 'pro',
+            errorData.error.userTier || 'free'
+          );
+        }
+      } catch (e) {
+        if (e instanceof TierRestrictionError) {
+          throw e;
+        }
+        // If parsing fails, fall through to generic error
+      }
+    }
+
     throw new Error(`API request failed: ${res.status} ${text}`);
   }
+
 
   return res.json();
 }
